@@ -16,7 +16,6 @@ import {
 
 // Iconos
 import AddHomeIcon from '@mui/icons-material/AddHome';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LoginIcon from '@mui/icons-material/Login';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AppRegistrationIcon from '@mui/icons-material/AppRegistration';

@@ -30,7 +30,7 @@ const AdminPanel = () => {
   // Usamos useEffect para cargar los datos cuando el componente se monta
   useEffect(() => {
     fetchSolicitudes();
-  }, []); // El '[]' asegura que se ejecute solo una vez al cargar
+  }, [fetchSolicitudes]); // El '[]' asegura que se ejecute solo una vez al cargar
 
   // Función para el botón "Aprobar"
   const handleAprobar = async (usuarioId) => {
