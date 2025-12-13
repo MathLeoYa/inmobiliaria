@@ -53,24 +53,25 @@ router.post('/:propiedadId', auth, async (req, res) => {
 
 router.get('/me', auth, async (req, res) => {
   try {
-    // 1. Obtenemos el ID del usuario (del token)
     const usuarioId = req.usuario.id;
 
-    // 2. Escribimos la consulta SQL con un JOIN
-    //    Queremos seleccionar TODO de "Propiedades"
-    //    DONDE la propiedad.id exista en la tabla "Favoritos"
-    //    Y pertenezca a NUESTRO usuarioId.
+    // AÑADIMOS LA SUB-CONSULTA PARA 'foto_principal'
     const query = `
-      SELECT T1.* FROM Propiedades AS T1
-      INNER JOIN Favoritos AS T2
-        ON T1.id = T2.propiedad_id
-      WHERE T2.usuario_id = $1
-      ORDER BY T2.fecha_agregado DESC; -- Mostrar los "me gusta" más recientes primero
+      SELECT p.*, 
+             (
+                SELECT f.url_foto 
+                FROM Fotos_Propiedad f 
+                WHERE f.propiedad_id = p.id 
+                ORDER BY f.orden ASC 
+                LIMIT 1
+             ) as foto_principal
+      FROM Propiedades p
+      INNER JOIN Favoritos f ON p.id = f.propiedad_id
+      WHERE f.usuario_id = $1
+      ORDER BY f.fecha_agregado DESC;
     `;
     
     const misFavoritos = await db.query(query, [usuarioId]);
-
-    // 3. Respondemos con la lista de propiedades favoritas
     res.json(misFavoritos.rows);
 
   } catch (err) {

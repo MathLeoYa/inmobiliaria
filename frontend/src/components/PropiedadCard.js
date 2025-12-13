@@ -28,32 +28,31 @@ const PropiedadCard = ({ propiedad, onLike }) => {
   return (
     <Card 
       sx={{ 
-        width: 300, // Ancho fijo para el estilo vertical compacto
+        width: '100%', // Ocupa el ancho de la columna del grid
+        height: '100%', // IMPORTANTE: Ocupa toda la altura disponible en la fila
+        display: 'flex', // Flexbox para distribuir espacio
+        flexDirection: 'column', // Columna vertical
         borderRadius: '16px', 
         boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
         transition: 'transform 0.2s ease-in-out',
         border: '1px solid #f0f0f0',
-        display: 'flex',
-        flexDirection: 'column',
         '&:hover': {
           transform: 'translateY(-5px)',
           boxShadow: '0 12px 24px rgba(0,0,0,0.12)',
         }
       }}
     >
-      <Link to={`/propiedad/${propiedad.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+      <Link to={`/propiedad/${propiedad.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', height: '100%' }}>
         <Box sx={{ position: 'relative' }}>
-          
-          {/* IMAGEN */}
+          {/* IMAGEN: Altura fija obligatoria */}
           <CardMedia
             component="img"
-            height="200"
+            height="200" // Altura fija para todas las imágenes
             image={propiedad.foto_principal || 'https://via.placeholder.com/300x200?text=Sin+Imagen'}
             alt={propiedad.titulo}
             sx={{ objectFit: 'cover' }}
           />
 
-          {/* CORAZÓN (Círculo Blanco) */}
           <IconButton 
             onClick={handleToggleFavorite}
             sx={{ 
@@ -70,21 +69,32 @@ const PropiedadCard = ({ propiedad, onLike }) => {
           </IconButton>
         </Box>
 
-        <CardContent sx={{ padding: '16px', pb: '16px !important' }}>
+        <CardContent sx={{ 
+            padding: '16px', 
+            pb: '16px !important', 
+            flexGrow: 1, // Esto hace que el contenido empuje el botón al fondo si sobra espacio
+            display: 'flex',
+            flexDirection: 'column'
+        }}>
           
-          {/* TIPO + OPERACIÓN (Ej. Casa - Arriendo) */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, color: '#666' }}>
              <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.7rem' }}>
                {propiedad.tipo} • {propiedad.operacion}
              </Typography>
           </Box>
 
-          {/* TÍTULO */}
-          <Typography variant="h6" component="div" sx={{ fontWeight: 700, mb: 0.5, lineHeight: 1.2, height: '44px', overflow: 'hidden' }}>
+          {/* TÍTULO: Altura mínima y máxima para alinear */}
+          <Typography variant="h6" component="div" sx={{ 
+              fontWeight: 700, mb: 0.5, lineHeight: 1.2, 
+              height: '44px', // Fija altura para 2 líneas
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical'
+          }}>
             {propiedad.titulo}
           </Typography>
 
-          {/* UBICACIÓN */}
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, color: '#888' }}>
             <LocationOnIcon sx={{ fontSize: 14, mr: 0.5, color: '#1976d2' }} />
             <Typography variant="caption" noWrap>
@@ -92,17 +102,19 @@ const PropiedadCard = ({ propiedad, onLike }) => {
             </Typography>
           </Box>
 
-          {/* PRECIO */}
           <Typography variant="h5" component="div" sx={{ fontWeight: 800, color: '#1976d2', mb: 2 }}>
             {formattedPrice}
           </Typography>
           
-          {/* BOTÓN VER DETALLES (Estilo Azul Sólido) */}
+          {/* Espaciador flexible para empujar el botón al fondo */}
+          <Box sx={{ flexGrow: 1 }} /> 
+
           <Button 
              variant="contained" 
              fullWidth 
              disableElevation
              sx={{ 
+               marginTop: 'auto', // Empuja el botón al final
                backgroundColor: '#1976d2', 
                color: 'white', 
                fontWeight: 'bold',
