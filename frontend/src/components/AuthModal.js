@@ -1,152 +1,244 @@
-// src/components/AuthModal.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
-    Dialog, DialogTitle, DialogContent, Box, Typography, TextField, Button,
-    IconButton, Divider, InputAdornment, Tabs, Tab, Alert, CircularProgress
+  Dialog, DialogContent, Box, Typography, TextField, Button,
+  IconButton, InputAdornment, Grid, useMediaQuery, useTheme, Alert, CircularProgress, Divider
 } from '@mui/material';
-import { Close, Google, Facebook, Visibility, VisibilityOff } from '@mui/icons-material';
+import { Close, Visibility, VisibilityOff } from '@mui/icons-material';
+import { GoogleLogin } from '@react-oauth/google';
 
-const AuthModal = ({ open, onClose, initialTab = 0 }) => {
-    const [tabValue, setTabValue] = useState(initialTab);
-    const [showPassword, setShowPassword] = useState(false);
+// --- IMPORTAR IMAGEN LOCAL ---
+// Asegúrate de que la imagen exista en esta ruta:
+import loginImage from '../assets/fondo-login.jpg'; 
+
+const AuthModal = ({ open, onClose, initialTab = 0 }) => { 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ nombre: '', email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setIsLogin(initialTab === 0);
+    setError('');
+    setFormData({ nombre: '', email: '', password: '' });
+  }, [open, initialTab]);
+
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  // --- LOGIN NORMAL ---
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
     
-    // Estados del formulario
-    const [formData, setFormData] = useState({ nombre: '', email: '', password: '' });
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+    const payload = isLogin 
+      ? { email: formData.email, password: formData.password }
+      : { nombre: formData.nombre, email: formData.email, password: formData.password };
 
-    React.useEffect(() => {
-        setTabValue(initialTab);
-        setError(''); // Limpiar errores al abrir
-        setFormData({ nombre: '', email: '', password: '' }); // Limpiar campos
-    }, [open, initialTab]);
+    try {
+      const res = await axios.post(`http://localhost:5000${endpoint}`, payload);
+      
+      if (isLogin) {
+        localStorage.setItem('token', res.data.token);
+        localStorage.setItem('usuario', JSON.stringify(res.data.usuario));
+        window.location.reload();
+      } else {
+        setIsLogin(true); 
+        alert('Cuenta creada con éxito. Por favor inicia sesión.');
+      }
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.msg || 'Ocurrió un error. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleTabChange = (event, newValue) => {
-        setTabValue(newValue);
-        setError('');
-    };
-
-    // --- LÓGICA DE INICIO DE SESIÓN ---
-    const handleLogin = async (event) => {
-        event.preventDefault();
+  // --- LOGIN CON GOOGLE ---
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
         setLoading(true);
-        setError('');
-
-        try {
-            const res = await axios.post('http://localhost:5000/api/auth/login', {
-                email: formData.email,
-                password: formData.password
-            });
-
-            // Guardar sesión
-            localStorage.setItem('token', res.data.token);
-            localStorage.setItem('usuario', JSON.stringify(res.data.usuario));
-
-            onClose(); // Cerrar modal
-            window.location.reload(); // Recargar para actualizar Navbar
-
-        } catch (err) {
-            setError(err.response?.data?.msg || 'Error al iniciar sesión');
-        }
+        const res = await axios.post('http://localhost:5000/api/auth/google', {
+            token: credentialResponse.credential
+        });
+        
+        localStorage.setItem('token', res.data.token);
+        localStorage.setItem('usuario', JSON.stringify(res.data.usuario));
+        
+        window.location.reload();
+        onClose();
+    } catch (err) {
+        console.error('Error Login Google:', err);
+        setError('Error al iniciar sesión con Google.');
+    } finally {
         setLoading(false);
-    };
+    }
+  };
 
-    // --- LÓGICA DE REGISTRO ---
-    const handleRegister = async (event) => {
-        event.preventDefault();
-        setLoading(true);
-        setError('');
+  return (
+    <Dialog 
+  open={open}
+  onClose={onClose}
+  maxWidth="md"
+  fullWidth
+  PaperProps={{
+    sx: {
+      borderRadius: '20px',
+      overflow: 'hidden',
+      height: { md: 600, xs: 'auto' } // 🔑 CLAVE
+    }
+  }}
+    >
+      <Grid container sx={{ height: '100%' }}>
+        
+        {/* --- IZQUIERDA: IMAGEN LOCAL --- */}
+        {!isMobile && (
+          <Grid item md={6} sx={{ position: 'relative' }}>
+            <Box
+  sx={{
+    width: '100%',
+    height: '100%',
+    backgroundImage: `url(${loginImage})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    position: 'relative'
+  }}
+            />
+            {/* Overlay Oscuro + Texto */}
+            <Box sx={{
+              position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.8))',
+              display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', p: 4
+            }}>
+              <Typography variant="h3" sx={{ color: 'white', fontWeight: 'bold', mb: 2 }}>“</Typography>
+              <Typography variant="h5" sx={{ color: 'white', fontWeight: 500, fontStyle: 'italic', mb: 1 }}>
+                Tu próximo hogar es el escenario de tus mejores recuerdos.
+              </Typography>
+              <Typography variant="subtitle1" sx={{ color: '#ddd', mt: 2 }}>
+                EliteHomes
+              </Typography>
+            </Box>
+          </Grid>
+        )}
 
-        try {
-            const res = await axios.post('http://localhost:5000/api/auth/register', {
-                nombre: formData.nombre,
-                email: formData.email,
-                password: formData.password
-            });
+        {/* --- DERECHA: FORMULARIO --- */}
+        <Grid item
+  xs={12}
+  md={6}
+  sx={{
+    backgroundColor: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    position: 'relative',
+    zIndex: 2 // 🔑 evita que nada lo tape
+   }}>
+          <IconButton 
+            onClick={onClose} 
+            sx={{ position: 'absolute', top: 10, right: 10, color: '#aaa' }}
+          >
+            <Close />
+          </IconButton>
 
-            // Auto-login después del registro (Opcional, pero recomendado)
-            // Si tu backend devuelve token al registrar, úsalo. Si no, pide login.
-            // Asumimos que el usuario debe loguearse o el backend ya dio token?
-            // En nuestro backend actual /register NO devuelve token, solo msg.
-            // Así que cambiamos al tab de login y mostramos éxito.
+          <DialogContent sx={{ p: { xs: 3, md: 6 }, display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
             
-            setTabValue(0); // Cambiar a pestaña Login
-            setError(''); 
-            alert('Cuenta creada con éxito. Por favor inicia sesión.'); // Feedback simple
-            setFormData({ ...formData, password: '' }); // Limpiar pass
+            <Typography variant="h4" fontWeight="800" color="#1a237e" gutterBottom>
+              {isLogin ? 'Bienvenido' : 'Crear Cuenta'}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+              {isLogin ? 'Ingresa tus datos para continuar.' : 'Únete a la comunidad de bienes raíces líder.'}
+            </Typography>
 
-        } catch (err) {
-            setError(err.response?.data?.msg || 'Error al registrarse');
-        }
-        setLoading(false);
-    };
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-    return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, p: 1 } }}>
-            <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6" component="div" sx={{ color: '#1a237e', fontWeight: 'bold' }}>
-                    {tabValue === 0 ? 'Bienvenido de nuevo' : 'Crea tu cuenta'}
-                </Typography>
-                <IconButton onClick={onClose} sx={{ color: 'grey.500' }}>
-                    <Close />
-                </IconButton>
-            </DialogTitle>
-            
-            <DialogContent>
-                {/* Mensaje de Error */}
-                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            {/* BOTONES SOCIALES */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3, alignItems: 'center' }}>
+                <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => setError('Falló el inicio de sesión con Google')}
+                    useOneTap
+                    width="300"
+                    theme="filled_blue"
+                    shape="pill"
+                    text={isLogin ? "signin_with" : "signup_with"}
+                />
+            </Box>
 
-                {/* Botones Sociales (Visuales por ahora) */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
-                    <Button variant="outlined" startIcon={<Google />} fullWidth sx={{ color: '#db4437', borderColor: '#db4437', textTransform: 'none' }}>
-                        Continuar con Google
-                    </Button>
-                    <Button variant="outlined" startIcon={<Facebook />} fullWidth sx={{ color: '#4267B2', borderColor: '#4267B2', textTransform: 'none' }}>
-                        Continuar con Facebook
-                    </Button>
+            <Divider sx={{ mb: 3, color: '#999', fontSize: '0.9rem' }}>o usa tu correo</Divider>
+
+            <Box component="form" onSubmit={handleSubmit}>
+              {!isLogin && (
+                <TextField
+                  margin="normal" fullWidth label="Nombre Completo" name="nombre"
+                  value={formData.nombre} onChange={handleChange} required
+                  size="small"
+                  InputProps={{ sx: { borderRadius: '8px' } }}
+                />
+              )}
+              <TextField
+                margin="normal" fullWidth label="Correo Electrónico" name="email"
+                value={formData.email} onChange={handleChange} required
+                size="small"
+                InputProps={{ sx: { borderRadius: '8px' } }}
+              />
+              <TextField
+                margin="normal" fullWidth label="Contraseña" name="password"
+                type={showPassword ? 'text' : 'password'}
+                value={formData.password} onChange={handleChange} required
+                size="small"
+                InputProps={{
+                  sx: { borderRadius: '8px' },
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+
+              {isLogin && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                  <Button size="small" sx={{ textTransform: 'none', color: '#666' }}>
+                    ¿Olvidaste tu contraseña?
+                  </Button>
                 </Box>
+              )}
 
-                <Divider sx={{ my: 3 }}><Typography variant="caption" color="text.secondary">O continúa con email</Typography></Divider>
+              <Button
+                type="submit" fullWidth variant="contained" disabled={loading}
+                sx={{ 
+                  mt: 3, mb: 2, py: 1.2, borderRadius: '30px', 
+                  fontSize: '1rem', fontWeight: 'bold', bgcolor: '#1a237e',
+                  '&:hover': { bgcolor: '#0d1a6b' }
+                }}
+              >
+                {loading ? <CircularProgress size={24} color="inherit" /> : (isLogin ? 'Ingresar' : 'Registrarse')}
+              </Button>
+            </Box>
 
-                <Tabs value={tabValue} onChange={handleTabChange} centered variant="fullWidth" sx={{ mb: 3 }}>
-                    <Tab label="Ingresar" />
-                    <Tab label="Registrarse" />
-                </Tabs>
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                {isLogin ? "¿Aún no tienes cuenta? " : "¿Ya tienes cuenta? "}
+                <Button 
+                  onClick={() => setIsLogin(!isLogin)} 
+                  sx={{ textTransform: 'none', fontWeight: 'bold', color: '#1a237e', p: 0, minWidth: 'auto' }}
+                >
+                  {isLogin ? 'Regístrate gratis' : 'Inicia sesión'}
+                </Button>
+              </Typography>
+            </Box>
 
-                {tabValue === 0 && (
-                    <Box component="form" onSubmit={handleLogin}>
-                        <TextField margin="normal" required fullWidth label="Correo Electrónico" name="email" autoComplete="email" value={formData.email} onChange={handleChange} />
-                        <TextField 
-                            margin="normal" required fullWidth label="Contraseña" name="password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={handleChange}
-                            InputProps={{ endAdornment: <InputAdornment position="end"><IconButton onClick={() => setShowPassword(!showPassword)}>{showPassword ? <VisibilityOff /> : <Visibility />}</IconButton></InputAdornment> }}
-                        />
-                        <Button type="submit" fullWidth variant="contained" disabled={loading} sx={{ mt: 3, mb: 2, bgcolor: '#1a237e', py: 1.5 }}>
-                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Ingresar'}
-                        </Button>
-                    </Box>
-                )}
-
-                {tabValue === 1 && (
-                    <Box component="form" onSubmit={handleRegister}>
-                        <TextField margin="normal" required fullWidth label="Nombre Completo" name="nombre" value={formData.nombre} onChange={handleChange} />
-                        <TextField margin="normal" required fullWidth label="Correo Electrónico" name="email" value={formData.email} onChange={handleChange} />
-                        <TextField 
-                            margin="normal" required fullWidth label="Contraseña" name="password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={handleChange}
-                            InputProps={{ endAdornment: <InputAdornment position="end"><IconButton onClick={() => setShowPassword(!showPassword)}>{showPassword ? <VisibilityOff /> : <Visibility />}</IconButton></InputAdornment> }}
-                        />
-                        <Button type="submit" fullWidth variant="contained" disabled={loading} sx={{ mt: 3, mb: 2, bgcolor: '#4caf50', py: 1.5 }}>
-                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Crear Cuenta'}
-                        </Button>
-                    </Box>
-                )}
-            </DialogContent>
-        </Dialog>
-    );
+          </DialogContent>
+        </Grid>
+      </Grid>
+    </Dialog>
+  );
 };
 
 export default AuthModal;

@@ -1,58 +1,76 @@
-// src/components/PropiedadDetalle.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { 
   Box, Typography, Button, Paper, Grid, CircularProgress, Alert,
-  Avatar, Divider, Chip, IconButton, Container, TextField, Snackbar, Tooltip, Menu, MenuItem, ListItemIcon, ListItemText
+  Avatar, IconButton, Container, Snackbar, Tooltip, Menu, MenuItem, 
+  Dialog, DialogContent, Chip 
 } from '@mui/material';
 import { 
   BedOutlined, BathtubOutlined, SquareFoot, LocationOn, Favorite, FavoriteBorder,
-  Share, WhatsApp, Facebook, Instagram, Language, Email, CheckCircleOutline, PhotoLibrary,
-  ContentCopy, Twitter, ArrowForward // <-- ASEGURATE DE QUE ESTE ESTÉ AQUÍ
+  Share, WhatsApp, CheckCircleOutline,
+  ArrowBackIosNew, ArrowForwardIos, Close, ZoomIn 
 } from '@mui/icons-material';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+
+import { GoogleMap, useJsApiLoader, MarkerF } from '@react-google-maps/api';
 import Slider from 'react-slick';
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 
-// Importar el componente de tarjeta para las recomendaciones
 import PropiedadCard from './PropiedadCard'; 
 
-// Fix iconos Leaflet
-import iconMarker from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+// --- CONFIGURACIÓN DEL MAPA ---
+const mapContainerStyle = { width: '100%', height: '400px', borderRadius: '12px' };
+const libraries = ['places']; // FUERA del componente
 
-let DefaultIcon = L.icon({ 
-  iconUrl: iconMarker, 
-  shadowUrl: iconShadow, 
-  iconAnchor: [12, 41] 
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+// --- ESTILOS FLECHAS CARRUSEL PEQUEÑO ---
+const arrowStyle = {
+  position: 'absolute', top: '50%', transform: 'translateY(-50%)', zIndex: 10,
+  bgcolor: 'white', color: '#333', width: 40, height: 40, borderRadius: '50%',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2)', border: '1px solid #f0f0f0',
+  '&:hover': { bgcolor: '#f5f5f5', transform: 'translateY(-50%) scale(1.1)' },
+  display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease'
+};
 
-function MapController({ center }) {
-  const map = useMap();
-  useEffect(() => { if(center) map.setView(center, 15); }, [center, map]);
-  return <Marker position={center} />;
-}
+const SlickArrowLeft = ({ currentSlide, slideCount, ...props }) => (
+  <IconButton {...props} sx={{ ...arrowStyle, left: 15, display: currentSlide === 0 ? 'none' : 'flex' }}>
+    <ArrowBackIosNew sx={{ fontSize: '18px' }} />
+  </IconButton>
+);
+
+const SlickArrowRight = ({ currentSlide, slideCount, ...props }) => (
+  <IconButton {...props} sx={{ ...arrowStyle, right: 15 }}>
+    <ArrowForwardIos sx={{ fontSize: '18px' }} />
+  </IconButton>
+);
+
+// --- ESTILOS FLECHAS MODAL (PANTALLA COMPLETA) - NUEVO ---
+// Usamos 'position: fixed' para que se queden pegadas a la pantalla, no a la imagen
+const modalArrowStyle = {
+    position: 'fixed', // Clave: fijo a la ventana
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: 'white',
+    bgcolor: 'rgba(0,0,0,0.5)',
+    width: 60, height: 60, // Más grandes
+    zIndex: 1301, // Por encima de todo el modal
+    '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' }
+};
 
 const PropiedadDetalle = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   
-  // Estados de datos
+  // Estados
   const [propiedad, setPropiedad] = useState(null);
-  const [similares, setSimilares] = useState([]); // <-- Estado para similares
+  const [similares, setSimilares] = useState([]);
   const [agente, setAgente] = useState(null);
-  
-  // Estados de UI
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(''); // eslint-disable-line
   const [isFavoritedLocal, setIsFavoritedLocal] = useState(false);
   
-  // Estados para compartir y notificaciones
+  // UI States
+  const [openModal, setOpenModal] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMsg, setSnackbarMsg] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
@@ -60,25 +78,32 @@ const PropiedadDetalle = () => {
   const isShareOpen = Boolean(shareAnchorEl);
   
   const token = localStorage.getItem('token');
+  const mapApiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
 
-  // --- 1. Cargar Propiedad y Similares ---
+  const { isLoaded: isMapLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: mapApiKey,
+    libraries: libraries 
+  });
+
+  // --- CARGA DE DATOS ---
   useEffect(() => {
     const cargarDatos = async () => {
       setLoading(true);
       try {
-        // A. Cargar Propiedad Principal
         const res = await axios.get(`http://localhost:5000/api/propiedades/${id}`, {
           headers: token ? { 'x-auth-token': token } : {}
         });
         
-        // Normalizar datos
         let amenidadesArray = [];
-        if (res.data.amenidades) {
-            if (Array.isArray(res.data.amenidades)) amenidadesArray = res.data.amenidades;
-            else if (typeof res.data.amenidades === 'string') amenidadesArray = res.data.amenidades.replace('{','').replace('}','').replace(/"/g,'').split(',');
+        const rawAmenidades = res.data.amenidades;
+        if (Array.isArray(rawAmenidades)) {
+            amenidadesArray = rawAmenidades;
+        } else if (typeof rawAmenidades === 'string') {
+            amenidadesArray = rawAmenidades.replace(/[{}"\\]/g, '').split(',').map(i => i.trim()).filter(i => i);
         }
-        const fotosLimpio = res.data.fotos ? res.data.fotos.map(f => f.url_foto || f) : [];
 
+        const fotosLimpio = res.data.fotos ? res.data.fotos.map(f => f.url_foto || f) : [];
         setPropiedad({ ...res.data, amenidades: amenidadesArray, fotos: fotosLimpio });
         setIsFavoritedLocal(res.data.is_favorited);
 
@@ -87,71 +112,42 @@ const PropiedadDetalle = () => {
           email: res.data.agente_email,
           telefono: res.data.agente_telefono,
           foto_perfil: res.data.agente_foto_perfil,
-          biografia: res.data.agente_biografia,
           facebook: res.data.agente_facebook,
           instagram: res.data.agente_instagram,
           sitio_web: res.data.agente_sitio_web,
-          logo_url: res.data.agente_logo_url 
         });
 
-        // B. Cargar Similares (si hay provincia)
         if (res.data.provincia) {
              try {
-                const resSim = await axios.get(`http://localhost:5000/api/propiedades`, {
-                    params: { provincia: res.data.provincia } 
-                });
-                // Filtrar la actual y tomar max 4
-                const otras = resSim.data.filter(p => p.id !== res.data.id).slice(0, 4);
+                const resSim = await axios.get(`http://localhost:5000/api/propiedades`, { params: { provincia: res.data.provincia } });
+                const otras = resSim.data.filter(p => p.id !== res.data.id).slice(0, 3);
                 setSimilares(otras);
-             } catch (errSim) {
-                 console.warn("Error cargando similares (no crítico):", errSim);
-             }
+             } catch (errSim) { console.warn("Error similares:", errSim); }
         }
 
       } catch (err) {
         console.error(err);
         setError('No se pudo cargar la propiedad.');
       } finally {
-        // C. IMPORTANTE: Terminar carga pase lo que pase
         setLoading(false);
       }
     };
-
     if (id) cargarDatos();
   }, [id, token]);
 
-  // --- Funciones de Interacción ---
-
+  // --- HANDLERS ---
   const handleToggleFavorite = async () => {
-    if (!token) { 
-        setSnackbarMsg('Inicia sesión para guardar en favoritos');
-        setSnackbarSeverity('warning');
-        setOpenSnackbar(true);
-        return; 
-    }
-    const previousState = isFavoritedLocal;
-    setIsFavoritedLocal(!previousState);
-    try {
-      const res = await axios.post(`http://localhost:5000/api/favoritos/${id}`, {}, { headers: { 'x-auth-token': token } });
-      setSnackbarMsg(res.data.msg);
-      setSnackbarSeverity('success');
-      setOpenSnackbar(true);
-    } catch (err) { 
-      setIsFavoritedLocal(previousState);
-      setSnackbarMsg('Error al conectar con el servidor');
-      setSnackbarSeverity('error');
-      setOpenSnackbar(true);
-    }
+      if (!token) { setSnackbarMsg('Inicia sesión para guardar'); setSnackbarSeverity('warning'); setOpenSnackbar(true); return; }
+      const previousState = isFavoritedLocal;
+      setIsFavoritedLocal(!previousState);
+      try {
+        const res = await axios.post(`http://localhost:5000/api/favoritos/${id}`, {}, { headers: { 'x-auth-token': token } });
+        setSnackbarMsg(res.data.msg); setSnackbarSeverity('success'); setOpenSnackbar(true);
+      } catch (err) { 
+        setIsFavoritedLocal(previousState); setSnackbarMsg('Error conexión'); setSnackbarSeverity('error'); setOpenSnackbar(true);
+      }
   };
-
-  // Like para las tarjetas similares (reusa la lógica simple)
-  const handleLikeSimilar = async (propId) => {
-      if (!token) { navigate('/login'); return; }
-      try { 
-          await axios.post(`http://localhost:5000/api/favoritos/${propId}`, {}, { headers: { 'x-auth-token': token } }); 
-      } catch(e) {}
-  };
-
+  
   const handleSwapPhoto = (indexToSwap) => {
     if (indexToSwap === 0) return; 
     const nuevasFotos = [...propiedad.fotos];
@@ -161,173 +157,237 @@ const PropiedadDetalle = () => {
     setPropiedad(prev => ({ ...prev, fotos: nuevasFotos }));
   };
 
-  // Compartir
-  const handleShareClick = (event) => setShareAnchorEl(event.currentTarget);
+  const handleOpenModal = (index) => { setCurrentImageIndex(index); setOpenModal(true); };
+  const handleCloseModal = () => setOpenModal(false);
+  const handleNextImage = (e) => { e.stopPropagation(); setCurrentImageIndex((prev) => (prev + 1) % propiedad.fotos.length); };
+  const handlePrevImage = (e) => { e.stopPropagation(); setCurrentImageIndex((prev) => (prev - 1 + propiedad.fotos.length) % propiedad.fotos.length); };
+
+  const handleShareClick = (e) => setShareAnchorEl(e.currentTarget);
   const handleShareClose = () => setShareAnchorEl(null);
-  const handleShareAction = (platform) => {
-    handleShareClose();
-    const shareUrl = window.location.href;
-    const shareText = `Mira esta propiedad en EliteHomes: ${propiedad.titulo}`;
-    let url = '';
-    switch (platform) {
-        case 'whatsapp': url = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`; window.open(url, '_blank'); break;
-        case 'facebook': url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`; window.open(url, '_blank'); break;
-        case 'twitter': url = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`; window.open(url, '_blank'); break;
-        case 'copy': navigator.clipboard.writeText(shareUrl).then(() => { setSnackbarMsg('Enlace copiado'); setSnackbarSeverity('success'); setOpenSnackbar(true); }); break;
-        default: break;
-    }
-  };
-
+  const handleShareAction = (platform) => { setShareAnchorEl(null); }; 
   const getWhatsAppLink = () => {
-      if (!agente || !agente.telefono) return '#';
-      const telefono = agente.telefono.replace(/\D/g, '');
-      const mensaje = `Hola ${agente.nombre}, estoy interesado en la propiedad "${propiedad.titulo}"...`;
-      return `https://api.whatsapp.com/send?phone=${telefono}&text=${encodeURIComponent(mensaje)}`;
+    if (!agente || !agente.telefono) return '#';
+    return `https://api.whatsapp.com/send?phone=${agente.telefono.replace(/\D/g, '')}&text=${encodeURIComponent(`Hola, info sobre: ${propiedad.titulo}`)}`;
   };
 
-  // Datos calculados
-  const formattedPrice = propiedad ? new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(propiedad.precio) : '$0';
-  const mapPosition = [propiedad?.latitud || -4.0080, propiedad?.longitud || -79.2045];
-  const mostrarIconosHabitables = propiedad && !['Terreno', 'Camping', 'Comercial'].includes(propiedad.tipo);
-  const settings = { dots: false, infinite: false, speed: 500, slidesToShow: 5, slidesToScroll: 1, responsive: [{ breakpoint: 1024, settings: { slidesToShow: 4 } }, { breakpoint: 600, settings: { slidesToShow: 3 } }] };
+  const settings = {
+    dots: false, infinite: propiedad?.fotos?.length > 4, speed: 500, slidesToShow: 4, slidesToScroll: 1,
+    nextArrow: <SlickArrowRight />, prevArrow: <SlickArrowLeft />,
+    responsive: [ { breakpoint: 600, settings: { slidesToShow: 3 } } ]
+  };
 
-  // --- Renderizado ---
+  const formattedPrice = propiedad ? new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(propiedad.precio) : '$0';
+  const mostrarIconosHabitables = propiedad && !['Terreno', 'Camping', 'Comercial'].includes(propiedad.tipo);
+
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box>;
-  if (error) return <Box sx={{ p: 5, textAlign: 'center' }}><Alert severity="error">{error}</Alert></Box>;
   if (!propiedad) return null;
 
   return (
-    <Box sx={{ bgcolor: 'white', minHeight: '100vh', pb: 8, pt: { xs: 2, md: 4 } }}>
-      
-      {/* GALERÍA */}
-      <Container maxWidth="xl" sx={{ mb: 6 }}>
-         <Box sx={{ height: { xs: '300px', md: '500px' }, borderRadius: '16px', overflow: 'hidden', display: 'flex', gap: '8px' }}>
-             <Box sx={{ flex: 2, position: 'relative', height: '100%' }}>
-                 <img src={propiedad.fotos[0]} alt="Principal" style={{ width:'100%', height:'100%', objectFit:'cover', cursor: 'default' }} />
-             </Box>
-             <Box sx={{ flex: 1, display: { xs: 'none', md: 'flex' }, flexWrap: 'wrap', gap: '8px', height: '100%' }}>
-                 {[1, 2, 3, 4].map(idx => (
-                     propiedad.fotos[idx] ? (
-                         <Box key={idx} sx={{ width: 'calc(50% - 4px)', height: 'calc(50% - 4px)', cursor: 'pointer', position: 'relative' }} onClick={() => handleSwapPhoto(idx)}>
-                             <img src={propiedad.fotos[idx]} alt={`Mosaico ${idx}`} style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius: '4px', transition: '0.2s opacity' }} onMouseOver={(e) => e.currentTarget.style.opacity = 0.8} onMouseOut={(e) => e.currentTarget.style.opacity = 1} />
-                             {idx === 4 && propiedad.fotos.length > 5 && <Button variant="contained" startIcon={<PhotoLibrary />} sx={{ position: 'absolute', bottom: 15, right: 15, bgcolor: 'white', color: 'black', fontWeight: 'bold', pointerEvents: 'none' }}>+{propiedad.fotos.length - 5}</Button>}
-                         </Box>
-                      ) : ( <Box key={idx} sx={{ width: 'calc(50% - 4px)', height: 'calc(50% - 4px)', bgcolor: '#f5f5f5', borderRadius: '4px' }} /> )
-                 ))}
-             </Box>
-         </Box>
-         {propiedad.fotos.length > 5 && (
-            <Box sx={{ mt: 2, px: 2 }}>
-                <Slider {...settings}>
-                    {propiedad.fotos.slice(5).map((foto, idx) => (
-                        <Box key={idx + 5} sx={{ px: 0.5, cursor: 'pointer' }} onClick={() => handleSwapPhoto(idx + 5)}>
-                            <img src={foto} alt="Extra" style={{ width: '100%', height: '80px', objectFit: 'cover', borderRadius: '8px' }} />
+    <Box sx={{ bgcolor: '#f9f9f9', minHeight: '100vh', pb: 8 }}>
+      <Container maxWidth="xl" sx={{ pt: 3 }}>
+         
+         {/* --- 1. GALERÍA PRINCIPAL (NUEVO LAYOUT: 1 Grande + 4 Pequeñas) --- */}
+         <Box sx={{ bgcolor: 'white', p: 1, borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', mb: 3 }}>
+             <Box sx={{ height: { xs: '300px', md: '500px' }, borderRadius: '12px', overflow: 'hidden', display: 'flex', gap: '8px', mb: 1 }}>
+                 
+                 {/* Imagen Grande (Izquierda) */}
+                 <Box 
+                   sx={{ flex: 3, position: 'relative', height: '100%', cursor: 'pointer', '&:hover .overlay-zoom': { opacity: 1 } }}
+                   onClick={() => handleOpenModal(0)}
+                 >
+                     <img src={propiedad.fotos[0]} alt="Principal" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                     <Box className="overlay-zoom" sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', bgcolor: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: '0.3s' }}>
+                        <ZoomIn sx={{ color: 'white', fontSize: 60 }} />
+                     </Box>
+                 </Box>
+                 
+                 {/* Columna Derecha (4 Miniaturas) */}
+                 <Box sx={{ flex: 1, display: { xs: 'none', md: 'flex' }, flexDirection: 'column', gap: '8px', height: '100%' }}>
+                     {/* Miniaturas 1, 2 y 3 */}
+                     {[1, 2, 3].map(idx => (
+                         propiedad.fotos[idx] && (
+                             <Box key={idx} sx={{ flex: 1, cursor: 'pointer', position: 'relative', overflow: 'hidden', borderRadius: '8px' }} onClick={() => handleSwapPhoto(idx)}>
+                                 <img src={propiedad.fotos[idx]} alt={`Thumb ${idx}`} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                             </Box>
+                         )
+                     ))}
+                     {/* Miniatura 4 (Boton "Ver más") */}
+                     {propiedad.fotos[4] ? (
+                        <Box sx={{ flex: 1, cursor: 'pointer', position: 'relative', overflow: 'hidden', borderRadius: '8px' }} onClick={() => handleOpenModal(4)}>
+                             <img src={propiedad.fotos[4]} alt="Ver mas" style={{ width:'100%', height:'100%', objectFit:'cover', filter: 'brightness(0.7)' }} />
+                             {propiedad.fotos.length > 5 && (
+                                <Typography sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'white', fontWeight: 'bold', fontSize: '1.2rem', textAlign: 'center' }}>
+                                    +{propiedad.fotos.length - 5} Fotos
+                                </Typography>
+                             )}
                         </Box>
-                    ))}
-                </Slider>
-            </Box>
-         )}
-      </Container>
-
-      <Container maxWidth="lg">
-        <Grid container spacing={4} justifyContent="space-between">
-          
-          {/* IZQUIERDA */}
-          <Grid item xs={12} md={7}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{propiedad.tipo} en {propiedad.ciudad}</Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="h4" fontWeight="800" sx={{ color: '#1a237e' }}>{propiedad.operacion} desde {formattedPrice}</Typography>
-                <Box sx={{ ml: 4, display: 'flex', gap: 1 }}>
-                    <Tooltip title="Favoritos"><IconButton onClick={handleToggleFavorite} sx={{ border: '1px solid #eee', color: isFavoritedLocal ? '#FF4500' : 'inherit', bgcolor: isFavoritedLocal ? '#fff0f0' : 'transparent' }}>{isFavoritedLocal ? <Favorite /> : <FavoriteBorder />}</IconButton></Tooltip>
-                    <Tooltip title="Compartir"><IconButton onClick={handleShareClick} sx={{ border: '1px solid #eee' }}><Share /></IconButton></Tooltip>
-                    <Menu anchorEl={shareAnchorEl} open={isShareOpen} onClose={handleShareClose}>
-                        <MenuItem onClick={() => handleShareAction('whatsapp')}><ListItemIcon><WhatsApp sx={{ color: '#25D366' }} /></ListItemIcon><ListItemText>WhatsApp</ListItemText></MenuItem>
-                        <MenuItem onClick={() => handleShareAction('facebook')}><ListItemIcon><Facebook sx={{ color: '#1877F2' }} /></ListItemIcon><ListItemText>Facebook</ListItemText></MenuItem>
-                        <MenuItem onClick={() => handleShareAction('copy')}><ListItemIcon><ContentCopy /></ListItemIcon><ListItemText>Copiar Enlace</ListItemText></MenuItem>
-                    </Menu>
-                </Box>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#333', mb: 4 }}><LocationOn fontSize="small" /><Typography fontWeight="500">{propiedad.direccion_texto || `${propiedad.ciudad}, ${propiedad.provincia}`}</Typography></Box>
-            <Divider />
-            
-            <Box sx={{ py: 3, display: 'flex', flexWrap: 'wrap', gap: { xs: 3, md: 6 }, alignItems: 'center' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><SquareFoot sx={{ fontSize: 28, color: '#333' }} /><Typography variant="body1" fontWeight="500">{propiedad.area_m2} m² tot.</Typography></Box>
-                {mostrarIconosHabitables && (
-                  <>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><BedOutlined sx={{ fontSize: 28, color: '#333' }} /><Typography variant="body1" fontWeight="500">{propiedad.habitaciones} hab.</Typography></Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><BathtubOutlined sx={{ fontSize: 28, color: '#333' }} /><Typography variant="body1" fontWeight="500">{propiedad.banos} baños</Typography></Box>
-                  </>
-                )}
-            </Box>
-            <Divider sx={{ mb: 4 }} />
-
-            <Typography variant="h6" fontWeight="bold" gutterBottom>Descripción</Typography>
-            <Typography variant="body1" sx={{ color: '#444', lineHeight: 1.7, whiteSpace: 'pre-wrap', mb: 4 }}>{propiedad.descripcion}</Typography>
-            {propiedad.amenidades && propiedad.amenidades.length > 0 && (
-                <Box sx={{ mb: 4 }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>Amenidades</Typography>
-                    <Grid container spacing={1}>
-                        {propiedad.amenidades.map((item, idx) => (<Grid item xs={6} sm={4} key={idx}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CheckCircleOutline color="success" fontSize="small" /><Typography variant="body2">{item}</Typography></Box></Grid>))}
-                    </Grid>
-                </Box>
-            )}
-            
-            <Typography variant="h6" fontWeight="bold" gutterBottom>Ubicación</Typography>
-            <Box sx={{ height: '500px', width: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e0e0e0', mb: 6 }}>
-                 <MapContainer center={mapPosition} zoom={15} style={{ height: '100%', width: '100%' }}><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapController center={mapPosition} /></MapContainer>
-            </Box>
-
-            {/* --- SECCIÓN DE SIMILARES --- */}
-            {similares.length > 0 && (
-                <Box sx={{ mt: 8, pt: 4, borderTop: '1px solid #eee' }}>
-                    <Typography variant="h5" fontWeight="bold" sx={{ color: '#333', mb: 3 }}>
-                        Otras propiedades en {propiedad.provincia}
-                    </Typography>
-                    <Grid container spacing={3}>
-                        {similares.map(sim => (
-                            <Grid item key={sim.id} xs={12} sm={6}> 
-                                <PropiedadCard propiedad={sim} onLike={handleLikeSimilar} />
-                            </Grid>
+                     ) : ( <Box sx={{ flex: 1, bgcolor: '#f5f5f5', borderRadius: '8px' }} /> )}
+                 </Box>
+             </Box>
+             
+             {/* Carrusel inferior (Opcional) */}
+             {propiedad.fotos.length > 0 && (
+                <Box sx={{ px: 3, mt: 1 }}>
+                    <Slider {...settings}>
+                        {propiedad.fotos.map((foto, idx) => (
+                            <Box key={idx} sx={{ px: 0.5, cursor: 'pointer', outline: 'none' }} onClick={() => handleSwapPhoto(idx)}>
+                                <img src={foto} alt="Miniatura" style={{ width: '100%', height: '80px', objectFit: 'cover', borderRadius: '8px', border: idx === 0 ? '2px solid #1976d2' : '1px solid #eee' }} />
+                            </Box>
                         ))}
-                    </Grid>
-                    <Box sx={{ textAlign: 'center', mt: 4 }}>
-                        <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/')} sx={{ fontWeight: 'bold', textTransform: 'none', borderRadius: '20px', px: 4 }}>
-                            Ver todo el catálogo
-                        </Button>
-                    </Box>
+                    </Slider>
                 </Box>
-            )}
+             )}
+         </Box>
 
-          </Grid>
-
-          {/* DERECHA */}
-          <Grid item xs={12} md={4}>
-             <Box sx={{ position: 'sticky', top: 100 }}>
-                <Paper elevation={3} sx={{ borderRadius: '16px', p: 3 }}>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>Contactar al Vendedor</Typography>
-                    {agente && (
-                      <>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, mt: 2, pb: 2, borderBottom: '1px solid #eee' }}>
-                            <Avatar src={agente.foto_perfil} sx={{ width: 64, height: 64, border: '2px solid #eee' }} />
-                            <Box>
-                                <Typography variant="subtitle1" fontWeight="bold" lineHeight={1.1}>{agente.nombre}</Typography>
-                                <Typography variant="caption" color="text.secondary">Agente Inmobiliario</Typography>
+         {/* --- 2. LAYOUT PRINCIPAL (8/4 Columnas) --- */}
+         <Grid container spacing={4} alignItems="flex-start"> 
+            
+            {/* IZQUIERDA (66.6%) */}
+            <Grid item xs={12} md={8}>
+                <Paper elevation={0} sx={{ p: 4, borderRadius: '16px', mb: 3, border: '1px solid #e0e0e0' }}>
+                    {/* Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Box>
+                            <Typography variant="overline" color="text.secondary" fontWeight="bold" letterSpacing={1}>{propiedad.tipo.toUpperCase()}</Typography>
+                            <Typography variant="h4" fontWeight="800" sx={{ color: '#1a237e', mt: -1 }}>{formattedPrice}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1, color: '#555' }}>
+                                <LocationOn fontSize="small" color="action" />
+                                <Typography variant="body1">{propiedad.direccion_texto || `${propiedad.ciudad}, ${propiedad.provincia}`}</Typography>
                             </Box>
                         </Box>
-                        <Button variant="contained" fullWidth startIcon={<WhatsApp />} href={getWhatsAppLink()} target="_blank" rel="noopener noreferrer" sx={{ mb: 1, bgcolor: '#25D366', '&:hover': { bgcolor: '#1DA851' }, py: 1.5, fontWeight: 'bold' }}>WhatsApp</Button>
-                        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
-                            {agente.facebook && <Tooltip title="Facebook"><IconButton href={agente.facebook} target="_blank" rel="noopener noreferrer" sx={{ color: '#1877F2', bgcolor: '#eaf4ff' }}><Facebook /></IconButton></Tooltip>}
-                            {agente.instagram && <Tooltip title="Instagram"><IconButton href={agente.instagram} target="_blank" rel="noopener noreferrer" sx={{ color: '#E4405F', bgcolor: '#ffeef2' }}><Instagram /></IconButton></Tooltip>}
-                            {agente.sitio_web && <Tooltip title="Web"><IconButton href={agente.sitio_web} target="_blank" rel="noopener noreferrer" sx={{ color: '#333', bgcolor: '#f5f5f5' }}><Language /></IconButton></Tooltip>}
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Tooltip title="Favoritos"><IconButton onClick={handleToggleFavorite} sx={{ border: '1px solid #eee' }}>{isFavoritedLocal ? <Favorite color="error" /> : <FavoriteBorder />}</IconButton></Tooltip>
+                            <Tooltip title="Compartir"><IconButton onClick={handleShareClick} sx={{ border: '1px solid #eee' }}><Share /></IconButton></Tooltip>
                         </Box>
-                      </>
+                    </Box>
+
+                    {/* Iconos */}
+                    <Grid container spacing={2} sx={{ my: 3, py: 3, borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0' }}>
+                         <Grid item xs={4} sx={{ textAlign: 'center', borderRight: '1px solid #f0f0f0' }}>
+                            <SquareFoot color="primary" sx={{ fontSize: 30, mb: 0.5 }} />
+                            <Typography variant="h6" fontWeight="bold">{propiedad.area_m2}</Typography>
+                            <Typography variant="caption" color="text.secondary">m² Totales</Typography>
+                         </Grid>
+                         {mostrarIconosHabitables && (
+                           <>
+                             <Grid item xs={4} sx={{ textAlign: 'center', borderRight: '1px solid #f0f0f0' }}>
+                                <BedOutlined color="primary" sx={{ fontSize: 30, mb: 0.5 }} />
+                                <Typography variant="h6" fontWeight="bold">{propiedad.habitaciones}</Typography>
+                                <Typography variant="caption" color="text.secondary">Habitaciones</Typography>
+                             </Grid>
+                             <Grid item xs={4} sx={{ textAlign: 'center' }}>
+                                <BathtubOutlined color="primary" sx={{ fontSize: 30, mb: 0.5 }} />
+                                <Typography variant="h6" fontWeight="bold">{propiedad.banos}</Typography>
+                                <Typography variant="caption" color="text.secondary">Baños</Typography>
+                             </Grid>
+                           </>
+                         )}
+                    </Grid>
+
+                    {/* Descripción y Amenidades */}
+                    <Typography variant="h6" fontWeight="bold" gutterBottom>Descripción</Typography>
+                    <Typography variant="body1" sx={{ color: '#444', lineHeight: 1.8, whiteSpace: 'pre-wrap', mb: 4 }}>{propiedad.descripcion}</Typography>
+                    
+                    {propiedad.amenidades?.length > 0 && (
+                        <Box sx={{ mb: 4 }}>
+                            <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 2 }}>Lo que ofrece este lugar</Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                                {propiedad.amenidades.map((item, idx) => (
+                                    <Chip key={idx} icon={<CheckCircleOutline fontSize="small" />} label={item} variant="outlined" sx={{ borderRadius: '8px', borderColor: '#e0e0e0', bgcolor: '#fafafa', fontWeight: '500', px: 1, py: 2.5 }} />
+                                ))}
+                            </Box>
+                        </Box>
                     )}
+                    
+                    {/* Mapa */}
+                    <Typography variant="h6" fontWeight="bold" gutterBottom>Ubicación</Typography>
+                    <Box sx={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+                        {isMapLoaded ? (
+                            <GoogleMap mapContainerStyle={mapContainerStyle} center={{ lat: Number(propiedad.latitud), lng: Number(propiedad.longitud) }} zoom={16} options={{ mapTypeControl: true, fullscreenControl: true, streetViewControl: true }}>
+                                <MarkerF position={{ lat: Number(propiedad.latitud), lng: Number(propiedad.longitud) }} />
+                            </GoogleMap>
+                        ) : <CircularProgress />}
+                    </Box>
                 </Paper>
-             </Box>
-          </Grid>
-        </Grid>
+            </Grid>
+
+            {/* DERECHA (33.3%) - Sticky */}
+            <Grid item xs={12} md={4}>
+                <Box sx={{ position: 'sticky', top: 20 }}>
+                    <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid #e0e0e0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom>Contactar Vendedor</Typography>
+                        {agente && (
+                            <>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, mt: 2 }}>
+                                    <Avatar src={agente.foto_perfil} sx={{ width: 70, height: 70, border: '1px solid #eee' }} />
+                                    <Box>
+                                        <Typography variant="subtitle1" fontWeight="bold" lineHeight={1.2}>{agente.nombre}</Typography>
+                                        <Typography variant="body2" color="text.secondary">Agente Inmobiliario</Typography>
+                                    </Box>
+                                </Box>
+                                <Button variant="contained" fullWidth startIcon={<WhatsApp />} href={getWhatsAppLink()} target="_blank" sx={{ mb: 2, bgcolor: '#25D366', '&:hover': { bgcolor: '#1DA851' }, py: 1.5, fontWeight: 'bold', borderRadius: '10px' }}>
+                                    Enviar WhatsApp
+                                </Button>
+                                <Button variant="outlined" fullWidth sx={{ borderRadius: '10px', py: 1.5, color: '#333', borderColor: '#ccc' }}>Ver Perfil</Button>
+                            </>
+                        )}
+                    </Paper>
+                    {similares.length > 0 && (
+                        <Box sx={{ mt: 3 }}>
+                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: '#555' }}>Propiedades Similares</Typography>
+                            {similares.map(sim => (
+                                <Box key={sim.id} sx={{ mb: 2 }}>
+                                     <PropiedadCard propiedad={sim} compact={true} onLike={()=>{}} /> 
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+                </Box>
+            </Grid>
+         </Grid>
+
       </Container>
-      <Snackbar open={openSnackbar} autoHideDuration={3000} onClose={() => setOpenSnackbar(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}><Alert onClose={() => setOpenSnackbar(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>{snackbarMsg}</Alert></Snackbar>
+      
+      {/* --- MODAL PANTALLA COMPLETA (NUEVO: Flechas Fijas a la Pantalla) --- */}
+      <Dialog 
+        open={openModal} 
+        onClose={handleCloseModal} 
+        maxWidth="xl" 
+        PaperProps={{ sx: { bgcolor: 'transparent', boxShadow: 'none', overflow: 'visible' } }} // overflow:visible para que se vean los botones fijos
+      >
+        {/* Botón Cerrar FIJO */}
+        <IconButton onClick={handleCloseModal} sx={{ ...modalArrowStyle, top: 40, right: 40, width: 50, height: 50, transform: 'none' }}>
+            <Close fontSize="large" />
+        </IconButton>
+
+        {/* Flecha Izquierda FIJA */}
+        <IconButton onClick={handlePrevImage} sx={{ ...modalArrowStyle, left: 40 }}>
+            <ArrowBackIosNew sx={{ fontSize: 30 }} />
+        </IconButton>
+
+        {/* Flecha Derecha FIJA */}
+        <IconButton onClick={handleNextImage} sx={{ ...modalArrowStyle, right: 40 }}>
+            <ArrowForwardIos sx={{ fontSize: 30 }} />
+        </IconButton>
+
+        {/* Contenido de la Imagen */}
+        <DialogContent sx={{ p: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}> {/* pointerEvents: none para que los clicks pasen a las flechas fijas si es necesario */}
+            <img 
+                src={propiedad.fotos[currentImageIndex]} 
+                alt="Full size" 
+                style={{ 
+                    maxHeight: '90vh', 
+                    maxWidth: '90vw', 
+                    borderRadius: '8px',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.5)', // Sombra para resaltar la imagen
+                    pointerEvents: 'auto' // Reactivamos eventos solo en la imagen
+                }} 
+            />
+        </DialogContent>
+      </Dialog>
+
+      <Menu anchorEl={shareAnchorEl} open={isShareOpen} onClose={handleShareClose}><MenuItem onClick={() => handleShareAction('whatsapp')}>WhatsApp</MenuItem></Menu>
+      <Snackbar open={openSnackbar} autoHideDuration={3000} onClose={() => setOpenSnackbar(false)}><Alert severity={snackbarSeverity}>{snackbarMsg}</Alert></Snackbar>
     </Box>
   );
 };

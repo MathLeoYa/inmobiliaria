@@ -1,327 +1,395 @@
-// src/components/EditarPropiedad.js
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
+import { 
+  FormControl, InputLabel, Select, MenuItem, TextField, Button, Box, Typography, Paper, Grid, CircularProgress, Alert, Chip, Divider
+} from '@mui/material';
+import { GoogleMap, useJsApiLoader, MarkerF, Autocomplete } from '@react-google-maps/api';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import MyLocationIcon from '@mui/icons-material/MyLocation';
+import CloseIcon from '@mui/icons-material/Close';
+import SaveIcon from '@mui/icons-material/Save';
 
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+const containerStyle = { width: '100%', height: '550px', borderRadius: '12px' };
 
-// (Solución al icono, sin cambios)
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-let DefaultIcon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconAnchor: [12, 41] });
-L.Marker.prototype.options.icon = DefaultIcon;
-
-// --- (Componente MapController, sin cambios) ---
-function MapController({ center, setPosicion }) {
-  const [markerPos, setMarkerPos] = useState(center);
-  const markerRef = useRef(null);
-  const map = useMap();
-
-  useEffect(() => {
-    map.flyTo(center, 15);
-    setMarkerPos(center);
-  }, [center, map]);
-
-  useMapEvents({
-    click(e) {
-      const newPos = [e.latlng.lat, e.latlng.lng];
-      setMarkerPos(newPos);
-      setPosicion(newPos);
-    },
-  });
-
-  const eventHandlers = useMemo(
-    () => ({
-      dragend() {
-        const marker = markerRef.current;
-        if (marker != null) {
-          const newPos = [marker.getLatLng().lat, marker.getLatLng().lng];
-          setPosicion(newPos);
-        }
-      },
-    }),
-    [setPosicion],
-  );
-
-  return (
-    <Marker
-      draggable={true}
-      eventHandlers={eventHandlers}
-      position={markerPos}
-      ref={markerRef}
-    />
-  );
-}
-
-// --- COMPONENTE PRINCIPAL (COMPLETO Y CORREGIDO) ---
 const EditarPropiedad = () => {
-  const navigate = useNavigate();
   const { id } = useParams();
-
-  const [formData, setFormData] = useState({
-    titulo: '',
-    descripcion: '',
-    precio: 0,
-    tipo: 'Casa',
-    habitaciones: 0,
-    banos: 0,
-    area_m2: 0,
-    latitud: -4.0080,
-    longitud: -79.2045,
-    direccion_texto: '',
-  });
+  const navigate = useNavigate();
   
+  const [provincias, setProvincias] = useState([]);
   const [archivos, setArchivos] = useState(null);
   const [mensaje, setMensaje] = useState('');
-  const [loading, setLoading] = useState(true);
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [mapCenter, setMapCenter] = useState([-4.0080, -79.2045]);
+  const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  // --- Cargar datos de la propiedad ---
+  // Estados para Amenidades
+  const [amenidades, setAmenidades] = useState([]);
+  const [nuevaAmenidad, setNuevaAmenidad] = useState('');
+
+  // --- SOLUCIÓN AL ERROR DE LOADER ---
+  // Definimos las librerías en un estado para que la REFERENCIA en memoria nunca cambie.
+  const [libraries] = useState(['places']); 
+
+  const [formData, setFormData] = useState({
+    titulo: '', descripcion: '', precio: '',
+    tipo: 'Casa', operacion: 'Venta',
+    habitaciones: '', banos: '', area_m2: '',
+    latitud: -0.1807, longitud: -78.4678, direccion_texto: '',
+    provincia: '', ciudad: '', calle: '', codigo_postal: '' 
+  });
+
+  const mostrarDetallesHabitables = !['Terreno', 'Camping', 'Comercial'].includes(formData.tipo);
+
+  // --- GOOGLE MAPS HOOKS ---
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_KEY, 
+    libraries: libraries // Usamos la variable de estado estable
+  });
+
+  const [map, setMap] = useState(null);
+  const autocompleteRef = useRef(null);
+  const geocoderRef = useRef(null);
+
+  // 1. Cargar Datos Iniciales
   useEffect(() => {
-    const fetchPropiedad = async () => {
-      setLoading(true);
-      try {
-        const res = await axios.get(`http://localhost:5000/api/propiedades/${id}`);
-        const data = res.data;
-        
-        // --- AQUÍ ESTÁ LA CORRECCIÓN ---
-        // El backend envía 'latitud' y 'longitud' como Strings
-        // Debemos convertirlos a Números (float)
-        const lat = parseFloat(data.latitud);
-        const lng = parseFloat(data.longitud);
+    const fetchData = async () => {
+        try {
+            const resProv = await axios.get('http://localhost:5000/api/locations/provincias');
+            setProvincias(resProv.data);
 
-        setFormData({
-          titulo: data.titulo || '',
-          descripcion: data.descripcion || '',
-          precio: data.precio || 0,
-          tipo: data.tipo || 'Casa',
-          habitaciones: data.habitaciones || 0,
-          banos: data.banos || 0,
-          area_m2: data.area_m2 || 0,
-          latitud: lat,  // <-- Usar el número
-          longitud: lng, // <-- Usar el número
-          direccion_texto: data.direccion_texto || '',
-        });
-        
-        setMapCenter([lat, lng]); // <-- Usar los números
-        setLoading(false);
+            const resProp = await axios.get(`http://localhost:5000/api/propiedades/${id}`);
+            const prop = resProp.data;
 
-      } catch (err) {
-        console.error(err);
-        setMensaje('Error: No se pudo cargar la propiedad para editar.');
-        setLoading(false);
-      }
+            setFormData({
+                titulo: prop.titulo,
+                descripcion: prop.descripcion || '',
+                precio: prop.precio,
+                tipo: prop.tipo,
+                operacion: prop.operacion,
+                habitaciones: prop.habitaciones || 0,
+                banos: prop.banos || 0,
+                area_m2: prop.area_m2,
+                latitud: parseFloat(prop.latitud),
+                longitud: parseFloat(prop.longitud),
+                direccion_texto: prop.direccion_texto || '',
+                provincia: prop.provincia || '',
+                ciudad: prop.ciudad || '',
+                calle: '', 
+                codigo_postal: ''
+            });
+
+            if (prop.amenidades && Array.isArray(prop.amenidades)) {
+                setAmenidades(prop.amenidades);
+            }
+            setDataLoaded(true);
+        } catch (err) {
+            console.error(err);
+            setMensaje('Error al cargar la propiedad.');
+        }
     };
-
-    fetchPropiedad();
+    fetchData();
   }, [id]);
 
-  // --- Funciones helper (Ahora sí están todas) ---
-  const onChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-  
-  const onFileChange = (e) => {
-    setArchivos(e.target.files);
-  };
-  
-  const handleMapPositionChange = (pos) => {
-    setFormData(prevState => ({
-      ...prevState,
-      latitud: pos[0],
-      longitud: pos[1]
-    }));
+  // --- LÓGICA AMENIDADES ---
+  const handleAgregarAmenidad = () => {
+    const valor = nuevaAmenidad.trim();
+    if (valor && !amenidades.includes(valor)) {
+        setAmenidades([...amenidades, valor]);
+        setNuevaAmenidad('');
+    }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery) return;
-    setLoading(true);
-    setMensaje('Buscando ubicación...');
-    try {
-      const res = await axios.get(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=1`
-      );
-      if (res.data && res.data.length > 0) {
-        const { lat, lon } = res.data[0];
-        const newPos = [parseFloat(lat), parseFloat(lon)];
-        setFormData(prevState => ({ ...prevState, latitud: newPos[0], longitud: newPos[1] }));
-        setMapCenter(newPos);
-        setMensaje('Ubicación encontrada.');
-      } else {
-        setMensaje('Error: Ubicación no encontrada.');
-      }
-    } catch (err) {
-      setMensaje('Error al buscar la ubicación.');
-    }
-    setLoading(false);
+  const handleBorrarAmenidad = (amenidadBorrar) => {
+    setAmenidades(amenidades.filter(a => a !== amenidadBorrar));
   };
 
-  const handleCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setMensaje('Error: La geolocalización no es soportada.');
-      return;
-    }
-    setLoading(true);
-    setMensaje('Obteniendo ubicación...');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const newPos = [position.coords.latitude, position.coords.longitude];
-        setFormData(prevState => ({ ...prevState, latitud: newPos[0], longitud: newPos[1], direccion_texto: 'Ubicación actual' }));
-        setMapCenter(newPos);
-        setMensaje('Ubicación actual obtenida.');
-        setLoading(false);
-      },
-      (err) => {
-        setMensaje('Error: No se pudo obtener la ubicación.');
-        setLoading(false);
-      }
-    );
+  const handleAmenidadKeyPress = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); handleAgregarAmenidad(); }
   };
+
+  // --- GEOCODING INVERSO ---
+  const detectarUbicacion = (lat, lng) => {
+    if (!window.google || !geocoderRef.current) return;
+
+    geocoderRef.current.geocode({ location: { lat, lng } }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        const addressComponents = results[0].address_components;
+        let googleProvincia = '';
+        let googleCanton = '';
+        let googleCalle = '';
+
+        addressComponents.forEach(comp => {
+            if (comp.types.includes('administrative_area_level_1')) googleProvincia = comp.long_name; 
+            if (comp.types.includes('locality') || comp.types.includes('administrative_area_level_2')) googleCanton = comp.long_name;
+            if (comp.types.includes('route')) googleCalle = comp.long_name;
+        });
+
+        if (googleProvincia && provincias.length > 0) {
+            const provinciaEncontrada = provincias.find(p => 
+                googleProvincia.toLowerCase().includes(p.nombre.toLowerCase()) ||
+                p.nombre.toLowerCase().includes(googleProvincia.toLowerCase().replace('province', '').trim())
+            );
+
+            if (provinciaEncontrada) {
+                setFormData(prev => ({ 
+                    ...prev, 
+                    provincia: provinciaEncontrada.nombre,
+                    ciudad: googleCanton || prev.ciudad,
+                    direccion_texto: results[0].formatted_address,
+                    calle: googleCalle || "Calle sin nombre"
+                }));
+            }
+        } else {
+             setFormData(prev => ({ ...prev, direccion_texto: results[0].formatted_address, calle: googleCalle }));
+        }
+      }
+    });
+  };
+
+  // --- MAPA ---
+  const onLoadMap = React.useCallback(function callback(map) {
+    setMap(map);
+    geocoderRef.current = new window.google.maps.Geocoder();
+  }, []);
+
+  const onUnmountMap = React.useCallback(function callback(map) { setMap(null); }, []);
+
+  const onMarkerDragEnd = (e) => {
+    if(!e.latLng) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setFormData(prev => ({ ...prev, latitud: lat, longitud: lng }));
+    detectarUbicacion(lat, lng);
+  };
+
+  const onMapClick = (e) => {
+    if(!e.latLng) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setFormData(prev => ({ ...prev, latitud: lat, longitud: lng }));
+    detectarUbicacion(lat, lng);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocompleteRef.current !== null) {
+        const place = autocompleteRef.current.getPlace();
+        if (place.geometry && place.geometry.location) {
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            setFormData(prev => ({ ...prev, latitud: lat, longitud: lng }));
+            map.panTo({ lat, lng });
+            map.setZoom(17);
+            detectarUbicacion(lat, lng);
+        }
+    }
+  };
+
+  // --- SUBMIT ---
+  const onChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const onFileChange = (e) => setArchivos(e.target.files);
   
-  // --- Función de envío (PUT) ---
   const onSubmit = async (e) => {
     e.preventDefault();
     setMensaje('');
     setLoading(true);
 
     const token = localStorage.getItem('token');
-    
-    if (archivos) {
-      setMensaje('Advertencia: La edición de fotos no está implementada. Los cambios en fotos no se guardarán.');
-    }
-
-    const datosParaEnviar = {
-      ...formData,
-      precio: parseFloat(formData.precio),
-      habitaciones: parseInt(formData.habitaciones),
-      banos: parseInt(formData.banos),
-      area_m2: parseInt(formData.area_m2),
-    };
+    let urlsDeFotos = [];
 
     try {
-      const res = await axios.put(
-        `http://localhost:5000/api/propiedades/${id}`,
-        datosParaEnviar,
-        { headers: { 'x-auth-token': token } }
-      );
+      if (archivos && archivos.length > 0) {
+          setMensaje('Subiendo nuevas imágenes...');
+          const promesas = [];
+          for (let i = 0; i < archivos.length; i++) {
+            const form = new FormData();
+            form.append('image', archivos[i]);
+            promesas.push(axios.post('http://localhost:5000/api/upload', form, { headers: { 'x-auth-token': token } }));
+          }
+          const resFotos = await Promise.all(promesas);
+          urlsDeFotos = resFotos.map(r => r.data.url);
+      }
+      
+      const datosFinales = {
+        ...formData,
+        precio: parseFloat(formData.precio),
+        area_m2: parseInt(formData.area_m2),
+        habitaciones: mostrarDetallesHabitables ? parseInt(formData.habitaciones) : 0,
+        banos: mostrarDetallesHabitables ? parseInt(formData.banos) : 0,
+        amenidades: amenidades,
+        fotos: urlsDeFotos.length > 0 ? urlsDeFotos : undefined 
+      };
 
-      setLoading(false);
-      setMensaje('¡Propiedad actualizada exitosamente!');
-      navigate(`/propiedad/${res.data.propiedad.id}`);
+      await axios.put(`http://localhost:5000/api/propiedades/${id}`, datosFinales, { headers: { 'x-auth-token': token } });
+      
+      alert('Propiedad actualizada con éxito');
+      navigate(`/mis-propiedades`);
 
     } catch (err) {
+      if (err.response && err.response.status === 403) {
+          alert("⛔ ERROR: Tu cuenta está SUSPENDIDA.");
+      } else {
+          setMensaje(`Error: ${err.response?.data?.msg || 'Error al actualizar'}`);
+      }
+    } finally {
       setLoading(false);
-      setMensaje(`Error actualizando propiedad: ${err.response?.data?.msg || err.message}`);
     }
   };
 
-
-  // --- Renderizado ---
-  if (loading && !formData.titulo) {
-    return <p>Cargando datos de la propiedad...</p>;
-  }
-
-  // Desestructuramos el formData para los 'value'
-  const {
-    titulo, descripcion, precio, tipo, habitaciones, banos,
-    area_m2, latitud, longitud, direccion_texto
-  } = formData;
+  if (loadError) return <Alert severity="error">Error Maps API. Recarga la página.</Alert>;
+  if (!dataLoaded) return <Box sx={{ display:'flex', justifyContent:'center', mt:10 }}><CircularProgress /></Box>;
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
-      <h2>Editar Propiedad</h2>
-      <form onSubmit={onSubmit}>
-        
-        <div style={{ marginBottom: '15px' }}>
-          <label>Fotos (Edición no disponible por ahora):</label><br />
-          <input type="file" name="fotos" onChange={onFileChange} multiple accept="image/*" disabled />
-        </div>
-        
-        {/* --- AQUÍ ESTÁN TODOS LOS CAMPOS QUE FALTABAN --- */}
-        <div style={{ marginBottom: '10px' }}>
-            <label>Título:</label>
-            <input type="text" name="titulo" value={titulo} onChange={onChange} required style={{ width: '100%' }} />
-        </div>
-        <div style={{ marginBottom: '10px' }}>
-            <label>Descripción:</label>
-            <textarea name="descripcion" value={descripcion} onChange={onChange} style={{ width: '100%', height: '80px' }} />
-        </div>
-        <div style={{ marginBottom: '10px' }}>
-            <label>Precio ($):</label>
-            <input type="number" name="precio" value={precio} onChange={onChange} required style={{ width: '100%' }} />
-        </div>
-        <div style={{ marginBottom: '10px' }}>
-            <label>Tipo:</label>
-            <select name="tipo" value={tipo} onChange={onChange} style={{ width: '100%' }}>
-                <option value="Casa">Casa</option>
-                <option value="Apartamento">Apartamento</option>
-                <option value="Terreno">Terreno</option>
-                <option value="Comercial">Comercial</option>
-            </select>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-            <input type="number" name="habitaciones" value={habitaciones} onChange={onChange} placeholder="Habitaciones" style={{ flex: 1 }} />
-            <input type="number" name="banos" value={banos} onChange={onChange} placeholder="Baños" style={{ flex: 1 }} />
-            <input type="number" name="area_m2" value={area_m2} onChange={onChange} placeholder="Área (m²)" style={{ flex: 1 }} />
-        </div>
-        
-        <h4 style={{ marginTop: '20px' }}>Ubicación</h4>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <input 
-            type="text" 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Ej: Cuenca, Ecuador"
-            style={{ flex: 3 }}
-          />
-          <button type="button" onClick={handleSearch} disabled={loading} style={{ flex: 1 }}>
-            Buscar
-          </button>
-        </div>
-        <button type="button" onClick={handleCurrentLocation} disabled={loading} style={{ width: '100%', marginBottom: '10px' }}>
-          📍 Usar mi ubicación actual
-        </button>
+    <Box sx={{ maxWidth: '1200px', margin: '40px auto', p: 2 }}>
+      <Typography variant="h4" fontWeight="800" gutterBottom sx={{ color: '#1a237e', mb: 3 }}>
+        Editar Propiedad
+      </Typography>
+      
+      <Paper elevation={3} sx={{ p: 4, borderRadius: '16px' }}>
+        <form onSubmit={onSubmit}>
+          
+          <Typography variant="h6" sx={{ mb: 2, color: '#555', borderBottom: '2px solid #eee', pb: 1 }}>
+            1. Información Básica
+          </Typography>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12}>
+              <TextField label="Título del Anuncio" name="titulo" value={formData.titulo} onChange={onChange} required fullWidth />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Operación</InputLabel>
+                <Select name="operacion" value={formData.operacion} label="Operación" onChange={onChange}>
+                  <MenuItem value="Venta">Venta</MenuItem>
+                  <MenuItem value="Arriendo">Arriendo</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField label="Precio ($)" name="precio" type="number" value={formData.precio} onChange={onChange} required fullWidth />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField label="Descripción" name="descripcion" value={formData.descripcion} onChange={onChange} multiline rows={3} fullWidth />
+            </Grid>
+          </Grid>
 
-        <div style={{ height: '350px', width: '100%', marginBottom: '10px' }}>
-          <MapContainer 
-            center={mapCenter}
-            zoom={15} 
-            scrollWheelZoom={true} 
-            style={{ height: '100%', width: '100%' }}
+          <Typography variant="h6" sx={{ mb: 2, color: '#555', borderBottom: '2px solid #eee', pb: 1 }}>
+            2. Características y Amenidades
+          </Typography>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Tipo</InputLabel>
+                <Select name="tipo" value={formData.tipo} label="Tipo" onChange={onChange}>
+                  <MenuItem value="Casa">Casa</MenuItem>
+                  <MenuItem value="Departamento">Departamento</MenuItem>
+                  <MenuItem value="Comercial">Comercial</MenuItem>
+                  <MenuItem value="Terreno">Terreno</MenuItem>
+                  <MenuItem value="Camping">Camping</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+               <TextField label="Área (m²)" name="area_m2" type="number" value={formData.area_m2} onChange={onChange} required fullWidth />
+            </Grid>
+            {mostrarDetallesHabitables && (
+              <>
+                <Grid item xs={6} sm={2}>
+                  <TextField label="Habitaciones" name="habitaciones" type="number" value={formData.habitaciones} onChange={onChange} fullWidth />
+                </Grid>
+                <Grid item xs={6} sm={2}>
+                  <TextField label="Baños" name="banos" type="number" value={formData.banos} onChange={onChange} fullWidth />
+                </Grid>
+              </>
+            )}
+
+            <Grid item xs={12} sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1a237e', fontWeight: 'bold' }}>
+                    Amenidades
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
+                    <TextField 
+                        size="small" 
+                        placeholder="Escribe y presiona Enter..." 
+                        value={nuevaAmenidad}
+                        onChange={(e) => setNuevaAmenidad(e.target.value)}
+                        onKeyPress={handleAmenidadKeyPress}
+                        sx={{ maxWidth: '400px', flex: 1 }}
+                    />
+                    <Button variant="contained" color="secondary" onClick={handleAgregarAmenidad} startIcon={<AddCircleOutlineIcon />} sx={{ height: '40px' }}>
+                        Agregar
+                    </Button>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, p: 2, bgcolor: '#fafafa', borderRadius: '8px', minHeight: '60px', border: '1px dashed #ccc' }}>
+                    {amenidades.map((tag, index) => (
+                        <Chip key={index} label={tag} onDelete={() => handleBorrarAmenidad(tag)} color="primary" variant="filled" deleteIcon={<CloseIcon style={{ color: 'white' }} />} />
+                    ))}
+                </Box>
+            </Grid>
+          </Grid>
+
+          <Typography variant="h6" sx={{ mb: 2, color: '#555', borderBottom: '2px solid #eee', pb: 1 }}>
+            3. Ubicación Exacta
+          </Typography>
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+             <Grid item xs={12} md={8}>
+                {isLoaded && (
+                    <Box sx={{ border: '2px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+                        <Box sx={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 10, width: '90%' }}>
+                            <Autocomplete onLoad={(a) => (autocompleteRef.current = a)} onPlaceChanged={onPlaceChanged}>
+                                <input type="text" placeholder="📍 Buscar dirección..." style={{ width: '100%', height: '50px', padding: '0 20px', borderRadius: '30px', border: '1px solid #ccc', outline: 'none' }} />
+                            </Autocomplete>
+                        </Box>
+                        <GoogleMap
+                            mapContainerStyle={containerStyle}
+                            center={{ lat: parseFloat(formData.latitud), lng: parseFloat(formData.longitud) }}
+                            zoom={16}
+                            onLoad={onLoadMap}
+                            onUnmount={onUnmountMap}
+                            onClick={onMapClick}
+                            options={{ mapTypeControl: false, streetViewControl: false }}
+                        >
+                            <MarkerF position={{ lat: parseFloat(formData.latitud), lng: parseFloat(formData.longitud) }} draggable={true} onDragEnd={onMarkerDragEnd} />
+                        </GoogleMap>
+                    </Box>
+                )}
+             </Grid>
+             
+             <Grid item xs={12} md={4}>
+                <Paper elevation={0} sx={{ p: 3, bgcolor: '#f8f9fa', borderRadius: '12px', height: '100%', border: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, color: '#1a237e' }}>
+                        <MyLocationIcon sx={{ mr: 1, fontSize: 30 }} />
+                        <Typography variant="h6" fontWeight="bold">Ubicación Actual</Typography>
+                    </Box>
+                    <Divider sx={{ mb: 2 }} />
+                    <Typography variant="body1" fontWeight="bold">{formData.provincia || "---"}</Typography>
+                    <Typography variant="body2">{formData.ciudad || "---"}</Typography>
+                    <Box sx={{ mt: 3, p: 1.5, bgcolor: '#e8eaf6', borderRadius: '8px' }}>
+                        <Typography variant="caption" display="block" color="textSecondary">Dirección:</Typography>
+                        <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{formData.direccion_texto}</Typography>
+                    </Box>
+                </Paper>
+             </Grid>
+          </Grid>
+
+          <Typography variant="h6" sx={{ mb: 2, color: '#555', borderBottom: '2px solid #eee', pb: 1 }}>
+            4. Actualizar Fotos (Opcional)
+          </Typography>
+          <Box sx={{ mb: 3, border: '2px dashed #1976d2', borderRadius: '12px', p: 4, textAlign: 'center', bgcolor: '#e3f2fd' }}>
+             <input type="file" multiple accept="image/*" onChange={onFileChange} style={{ display: 'block', margin: '0 auto', cursor: 'pointer' }} />
+             <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>Si subes fotos nuevas, se añadirán/reemplazarán.</Typography>
+          </Box>
+
+          <Button type="submit" variant="contained" size="large" fullWidth disabled={loading} startIcon={<SaveIcon />}
+            sx={{ py: 2, fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '12px' }}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <MapController center={mapCenter} setPosicion={handleMapPositionChange} />
-          </MapContainer>
-        </div>
+            {loading ? 'Guardando...' : 'Guardar Cambios'}
+          </Button>
 
-        <div style={{ marginBottom: '10px' }}>
-          <label>Dirección (Texto):</label>
-          <input type="text" name="direccion_texto" value={direccion_texto} onChange={onChange} style={{ width: '100%' }} />
-        </div>
-        
-        {/* --- ESTA LÍNEA AHORA FUNCIONARÁ --- */}
-        <p style={{ fontSize: '0.9em', color: '#555' }}>
-            Lat: {latitud.toFixed(6)}, Lng: {longitud.toFixed(6)}
-        </p>
-        
-        <button type="submit" disabled={loading} style={{ padding: '10px 20px', marginTop: '10px', background: 'blue', color: 'white' }}>
-          {loading ? 'Actualizando...' : 'Actualizar Propiedad'}
-        </button>
-      </form>
-
-      {mensaje && (
-        <p style={{ marginTop: '15px', color: mensaje.startsWith('Error') ? 'red' : 'green' }}>
-          {mensaje}
-        </p>
-      )}
-    </div>
+        </form>
+        {mensaje && <Typography sx={{ mt: 3, color: mensaje.startsWith('Error') ? 'red' : 'green', textAlign: 'center', fontWeight: 'bold' }}>{mensaje}</Typography>}
+      </Paper>
+    </Box>
   );
 };
 

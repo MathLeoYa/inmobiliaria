@@ -87,7 +87,8 @@ const MisFavoritos = () => {
 
         <Grid container spacing={3}>
           {favoritos.map((prop) => (
-<Grid item key={prop.id} xs={12} sm={6} md={4} lg={3} sx={{ display: 'flex' }}>              {/* --- TARJETA HORIZONTAL --- */}
+            <Grid item xs={12} key={prop.id}>
+              {/* --- TARJETA HORIZONTAL --- */}
               <Paper 
                 elevation={3} 
                 sx={{ 
@@ -95,21 +96,28 @@ const MisFavoritos = () => {
                     flexDirection: { xs: 'column', md: 'row' },
                     borderRadius: '12px', 
                     overflow: 'hidden',
+                    height: { md: 260 },
                     transition: '0.3s',
                     '&:hover': { transform: 'translateY(-3px)', boxShadow: 6 }
                 }}
               >
                 {/* 1. IMAGEN (Izquierda) */}
-                <Box sx={{ 
-                    width: { xs: '100%', md: '35%' }, 
-                    height: { xs: '200px', md: 'auto' },
-                    minHeight: '220px',
-                    position: 'relative'
-                }}>
-                    <img 
-                        src={prop.foto_principal || 'https://via.placeholder.com/400x300'} 
-                        alt={prop.titulo}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                <Box
+  sx={{
+    width: { xs: '100%', md: 320 },
+    height: { xs: 200, md: '100%' }, 
+    flexShrink: 0,
+    position: 'relative'
+  }}
+>
+  <img
+    src={prop.foto_principal || 'https://via.placeholder.com/400x300'}
+    alt={prop.titulo}
+    style={{
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover'
+    }}
                     />
                     <Chip 
                         label={prop.operacion} 
@@ -119,9 +127,14 @@ const MisFavoritos = () => {
                 </Box>
 
                 {/* 2. CONTENIDO (Derecha) */}
-                <Box sx={{ flex: 1, p: 3, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <Box sx={{
+                      flex: 1,
+                      p: 3,
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
                     
-                    <Box>
+                    <Box sx={{ flexGrow: 1 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                             <Typography variant="h6" fontWeight="bold" sx={{ color: '#333', lineHeight: 1.2 }}>
                                 {prop.titulo}
@@ -151,11 +164,17 @@ const MisFavoritos = () => {
                         </Box>
                     </Box>
 
-                    <Box sx={{ 
-                        mt: 3, pt: 2, borderTop: '1px solid #eee', 
-                        display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, 
-                        justifyContent: 'space-between', alignItems: 'center', gap: 2 
-                    }}>
+                    <Box
+  sx={{
+    pt: 2,
+    borderTop: '1px solid #eee',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 2
+  }}
+>
+
                         <Typography variant="h5" fontWeight="800" sx={{ color: '#1a237e' }}>
                             {new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(prop.precio)}
                         </Typography>

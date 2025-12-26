@@ -1,6 +1,7 @@
 // src/components/AdminPanel.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import GestionAgentes from './GestionAgentes';
 import { 
   Box, Typography, Paper, Grid, Button, Avatar, Chip, 
   Tabs, Tab, CircularProgress, Alert, Container, IconButton, Divider
@@ -95,18 +96,22 @@ const AdminPanel = () => {
             <Tab label={`Pendientes (${solicitudes.filter(u => u.estado_agente === 'PENDIENTE').length})`} />
             <Tab label={`Aprobadas (${solicitudes.filter(u => u.estado_agente === 'APROBADO').length})`} />
             <Tab label={`Rechazadas (${solicitudes.filter(u => u.estado_agente === 'RECHAZADO').length})`} />
+            <Tab label="Gestión Total" />
           </Tabs>
         </Paper>
-
-        {/* Lista de Tarjetas */}
-        <Grid container spacing={3}>
-          {filteredList.length === 0 ? (
-            <Grid item xs={12}>
-               <Paper sx={{ p: 5, textAlign: 'center', borderRadius: '12px', bgcolor: 'transparent' }} elevation={0}>
-                  <Typography variant="h6" color="textSecondary">No hay solicitudes en esta categoría.</Typography>
-               </Paper>
-            </Grid>
-          ) : (
+        {tabValue === 3 ? (
+            // Si estamos en "Gestión Total", mostramos el componente CRUD
+            <GestionAgentes />
+        ) : (
+            // Si NO es el tab 3, mostramos la lista de solicitudes normal
+            <Grid container spacing={3}>
+              {filteredList.length === 0 ? (
+                <Grid item xs={12}>
+                   <Paper sx={{ p: 5, textAlign: 'center', borderRadius: '12px', bgcolor: 'transparent' }} elevation={0}>
+                      <Typography variant="h6" color="textSecondary">No hay solicitudes en esta categoría.</Typography>
+                   </Paper>
+                </Grid>
+              ) : (
             filteredList.map((user) => (
               <Grid item xs={12} key={user.id}>
                 <Paper elevation={2} sx={{ p: 3, borderRadius: '16px', display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
@@ -194,6 +199,7 @@ const AdminPanel = () => {
             ))
           )}
         </Grid>
+        )}
       </Container>
     </Box>
   );

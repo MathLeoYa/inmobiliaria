@@ -1,25 +1,38 @@
-// src/components/AgenteRuta.js
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { Alert, Container, Button } from '@mui/material';
 
 const AgenteRuta = ({ children }) => {
   const token = localStorage.getItem('token');
-  const usuarioData = localStorage.getItem('usuario');
-  const usuario = usuarioData ? JSON.parse(usuarioData) : null;
+  const usuario = JSON.parse(localStorage.getItem('usuario'));
 
-  // 1. ¿Está logueado?
+  // 1. Si no hay login, manda a login
   if (!token || !usuario) {
     return <Navigate to="/login" />;
   }
 
-  // 2. ¿Es Agente O Admin? (Los Admins también pueden publicar)
+  // 2. Si no es Agente ni Admin, manda a solicitar
   if (usuario.rol !== 'AGENTE' && usuario.rol !== 'ADMIN') {
-    // Si es un simple CLIENTE, lo mandamos al inicio.
-    alert('Acceso denegado. Solo para Agentes.');
-    return <Navigate to="/" />;
+    return <Navigate to="/solicitar-agente" />;
   }
 
-  // ¡Permiso concedido!
+  // 3. --- NUEVO: SI ESTÁ SUSPENDIDO ---
+  if (usuario.estado_agente === 'SUSPENDIDO') {
+      return (
+        <Container sx={{ mt: 10 }}>
+            <Alert severity="error" variant="filled" 
+                action={
+                    <Button color="inherit" size="small" href="/mis-propiedades">
+                        Ver Detalles
+                    </Button>
+                }
+            >
+                ⛔ ACCESO DENEGADO: Tu cuenta de agente está <strong>SUSPENDIDA</strong>.
+            </Alert>
+        </Container>
+      );
+  }
+
   return children;
 };
 

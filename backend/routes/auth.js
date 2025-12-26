@@ -5,7 +5,8 @@ const db = require('../config/db');
 const jwt = require('jsonwebtoken'); // ¡Importante! Añadir esto
 
 const router = express.Router();
-
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // --- Endpoint: POST /api/auth/register ---
 // (Este código ya lo tienes)
 router.post('/register', async (req, res) => {
@@ -114,6 +115,65 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Error en /login:', err.message);
     res.status(500).send('Error del servidor');
+  }
+});
+router.post('/google', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // 1. Verificar el token con Google (Seguridad crítica)
+    const ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const { name, email, picture, sub: googleId } = ticket.getPayload();
+
+    // 2. Buscar si el usuario ya existe
+    const userCheck = await db.query('SELECT * FROM Usuarios WHERE email = $1', [email]);
+
+    let usuario;
+
+    if (userCheck.rows.length > 0) {
+        // --- USUARIO EXISTE: INICIAR SESIÓN ---
+        usuario = userCheck.rows[0];
+        
+        // Si no tenía google_id guardado, lo actualizamos (vinculación de cuenta)
+        if (!usuario.google_id) {
+            await db.query('UPDATE Usuarios SET google_id = $1, foto_perfil = COALESCE(foto_perfil, $2) WHERE id = $3', 
+                [googleId, picture, usuario.id]
+            );
+        }
+    } else {
+        // --- USUARIO NUEVO: REGISTRAR ---
+        // Generamos una contraseña aleatoria segura porque entra por Google
+        const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(randomPassword, salt);
+
+        const newUser = await db.query(
+            `INSERT INTO Usuarios (nombre, email, password_hash, google_id, foto_perfil, rol, estado_agente) 
+             VALUES ($1, $2, $3, $4, $5, 'CLIENTE', 'NO_SOLICITADO') 
+             RETURNING *`,
+            [name, email, passwordHash, googleId, picture]
+        );
+        usuario = newUser.rows[0];
+    }
+
+    // 3. Generar JWT (Igual que en el login normal)
+    const payload = {
+        usuario: { id: usuario.id, rol: usuario.rol }
+    };
+
+    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5h' }, (err, token) => {
+        if (err) throw err;
+        // Quitamos hash antes de enviar
+        delete usuario.password_hash;
+        res.json({ token, usuario });
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ msg: 'Token de Google inválido o error en servidor' });
   }
 });
 

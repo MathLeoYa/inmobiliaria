@@ -1,8 +1,6 @@
-// src/components/PropiedadCard.js
 import React, { useState, useEffect } from 'react';
-import { Card, CardMedia, CardContent, Typography, IconButton, Box, Chip, Button } from '@mui/material';
-import { Favorite, FavoriteBorder, BathtubOutlined, BedOutlined, SquareFoot } from '@mui/icons-material';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
+import { Card, CardMedia, CardContent, Typography, IconButton, Box, Button, Chip } from '@mui/material';
+import { Favorite, FavoriteBorder, LocationOn, BedOutlined, BathtubOutlined, SquareFoot } from '@mui/icons-material';
 import { Link } from 'react-router-dom';
 
 const PropiedadCard = ({ propiedad, onLike }) => {
@@ -13,120 +11,121 @@ const PropiedadCard = ({ propiedad, onLike }) => {
   }, [propiedad.is_favorited]);
 
   const handleToggleFavorite = (event) => {
-    event.preventDefault();
+    event.preventDefault(); // Evita que el link de la tarjeta se active
     event.stopPropagation();
-    onLike(propiedad.id);
+    if (onLike) {
+        onLike(propiedad.id);
+    }
     setIsFavoritedLocal(prev => !prev);
   };
 
-  const formattedPrice = new Intl.NumberFormat('es-EC', { 
+  const formattedPrice = new Intl.NumberFormat('es-EC', {
     style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0
   }).format(propiedad.precio);
 
-  const ubicacionTexto = [propiedad.ciudad, propiedad.provincia].filter(Boolean).join(', ');
-
   return (
-    <Card 
-      sx={{ 
-        width: '100%', // Ocupa el ancho de la columna del grid
-        height: '100%', // IMPORTANTE: Ocupa toda la altura disponible en la fila
-        display: 'flex', // Flexbox para distribuir espacio
-        flexDirection: 'column', // Columna vertical
-        borderRadius: '16px', 
-        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-        transition: 'transform 0.2s ease-in-out',
-        border: '1px solid #f0f0f0',
-        '&:hover': {
-          transform: 'translateY(-5px)',
-          boxShadow: '0 12px 24px rgba(0,0,0,0.12)',
-        }
+    <Card
+      sx={{
+        width: 340,      // 👈 ANCHO FIJO
+        maxWidth: 340,
+        height: '100%', // IMPORTANTE: Ocupa toda la altura disponible del contenedor padre
+        display: 'flex', // Activa Flexbox para la tarjeta
+        flexDirection: 'column', // Organiza los hijos en columna
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        transition: '0.3s',
+        position: 'relative',
+        '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }
       }}
     >
-      <Link to={`/propiedad/${propiedad.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Box sx={{ position: 'relative' }}>
-          {/* IMAGEN: Altura fija obligatoria */}
-          <CardMedia
-            component="img"
-            height="200" // Altura fija para todas las imágenes
-            image={propiedad.foto_principal || 'https://via.placeholder.com/300x200?text=Sin+Imagen'}
-            alt={propiedad.titulo}
-            sx={{ objectFit: 'cover' }}
-          />
+      {/* Chip de Operación (Venta/Arriendo) */}
+      <Chip
+        label={propiedad.operacion}
+        size="small"
+        color={propiedad.operacion === 'Venta' ? 'primary' : 'secondary'}
+        sx={{ position: 'absolute', top: 10, left: 10, fontWeight: 'bold', zIndex: 2 }}
+      />
 
-          <IconButton 
-            onClick={handleToggleFavorite}
-            sx={{ 
-              position: 'absolute', top: 10, right: 10, 
-              backgroundColor: 'white',
-              color: isFavoritedLocal ? '#FF4500' : '#888',
-              '&:hover': { backgroundColor: '#f5f5f5' },
-              width: 32, height: 32,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-            size="small"
-          >
-            {isFavoritedLocal ? <Favorite fontSize="small" /> : <FavoriteBorder fontSize="small" />}
-          </IconButton>
-        </Box>
+      {/* Botón de Favorito */}
+      <IconButton
+        onClick={handleToggleFavorite}
+        sx={{
+          position: 'absolute', top: 5, right: 5,
+          bgcolor: 'rgba(255,255,255,0.8)',
+          color: isFavoritedLocal ? '#d32f2f' : '#757575',
+          zIndex: 2,
+          '&:hover': { bgcolor: 'white' }
+        }}
+      >
+        {isFavoritedLocal ? <Favorite /> : <FavoriteBorder />}
+      </IconButton>
 
-        <CardContent sx={{ 
-            padding: '16px', 
-            pb: '16px !important', 
-            flexGrow: 1, // Esto hace que el contenido empuje el botón al fondo si sobra espacio
+      {/* Enlace principal que envuelve la imagen y el contenido */}
+      <Link to={`/propiedad/${propiedad.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+        <CardMedia
+          component="img"
+          height="200" // Altura fija para la imagen
+          image={propiedad.foto_principal || 'https://via.placeholder.com/400x250?text=Sin+Imagen'}
+          alt={propiedad.titulo}
+          sx={{ objectFit: 'cover' }}
+        />
+
+        <CardContent sx={{
+            p: 2,
+            flexGrow: 1, // IMPORTANTE: Hace que este contenedor ocupe el espacio restante
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            justifyContent: 'space-between' // Distribuye el espacio entre el contenido superior y el inferior
         }}>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, color: '#666' }}>
-             <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.7rem' }}>
-               {propiedad.tipo} • {propiedad.operacion}
-             </Typography>
-          </Box>
-
-          {/* TÍTULO: Altura mínima y máxima para alinear */}
-          <Typography variant="h6" component="div" sx={{ 
-              fontWeight: 700, mb: 0.5, lineHeight: 1.2, 
-              height: '44px', // Fija altura para 2 líneas
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical'
-          }}>
-            {propiedad.titulo}
-          </Typography>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, color: '#888' }}>
-            <LocationOnIcon sx={{ fontSize: 14, mr: 0.5, color: '#1976d2' }} />
-            <Typography variant="caption" noWrap>
-              {ubicacionTexto || 'Ubicación no especificada'}
+          {/* Contenido Superior (Título, Ubicación, Características) */}
+          <Box>
+            <Typography variant="h6" fontWeight="bold" sx={{
+                mb: 1,
+                lineHeight: 1.2,
+                height: '2.4em', // Altura fija para 2 líneas de texto
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+               WebkitLineClamp: 2, // <--- CORREGIDO
+                WebkitBoxOrient: 'vertical' // <--- CORREGIDO
+            }}>
+              {propiedad.titulo}
             </Typography>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary', mb: 2 }}>
+              <LocationOn fontSize="small" sx={{ mr: 0.5 }} />
+              <Typography variant="body2" noWrap>
+                {propiedad.ciudad}, {propiedad.provincia}
+              </Typography>
+            </Box>
+
+            {/* Iconos de características */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 2, color: 'text.secondary' }}>
+              {propiedad.habitaciones > 0 && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <BedOutlined fontSize="small" /> <Typography variant="caption">{propiedad.habitaciones}</Typography>
+                </Box>
+              )}
+              {propiedad.banos > 0 && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <BathtubOutlined fontSize="small" /> <Typography variant="caption">{propiedad.banos}</Typography>
+                </Box>
+              )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <SquareFoot fontSize="small" /> <Typography variant="caption">{propiedad.area_m2} m²</Typography>
+              </Box>
+            </Box>
           </Box>
 
-          <Typography variant="h5" component="div" sx={{ fontWeight: 800, color: '#1976d2', mb: 2 }}>
-            {formattedPrice}
-          </Typography>
-          
-          {/* Espaciador flexible para empujar el botón al fondo */}
-          <Box sx={{ flexGrow: 1 }} /> 
-
-          <Button 
-             variant="contained" 
-             fullWidth 
-             disableElevation
-             sx={{ 
-               marginTop: 'auto', // Empuja el botón al final
-               backgroundColor: '#1976d2', 
-               color: 'white', 
-               fontWeight: 'bold',
-               textTransform: 'none',
-               borderRadius: '8px',
-               py: 1,
-               '&:hover': { backgroundColor: '#1565c0' }
-             }}
-          >
-            Ver Detalles
-          </Button>
-
+          {/* Contenido Inferior (Precio y Botón) - Siempre al fondo */}
+          <Box>
+            <Typography variant="h5" fontWeight="bold" color="primary.main" sx={{ mb: 2 }}>
+              {formattedPrice}
+            </Typography>
+            <Button variant="contained" fullWidth sx={{ textTransform: 'none', fontWeight: 'bold' }}>
+              Ver Detalles
+            </Button>
+          </Box>
         </CardContent>
       </Link>
     </Card>

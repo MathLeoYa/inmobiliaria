@@ -20,6 +20,7 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 
 // Importamos el Modal de Autenticación
 import AuthModal from './AuthModal'; 
+import NotificationMenu from './NotificationMenu';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -69,7 +70,7 @@ const Navbar = () => {
   const drawerContent = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
       <Typography variant="h6" sx={{ my: 2, color: '#1a237e', fontWeight: 'bold' }}>
-        EliteHomes
+        BiodesarrolloSAS
       </Typography>
       <Divider />
       <List>
@@ -95,8 +96,8 @@ const Navbar = () => {
                 </ListItem>
               </>
             ) : (
-               <ListItem button component={RouterLink} to="/solicitar-agente">
-                   <ListItemText primary="Quiero ser Agente" inset />
+               <ListItem button component={RouterLink} to="/planes">
+                   <ListItemText primary="Mejorar Plan" inset />
                </ListItem>
             )}
              {(usuario?.rol === 'ADMIN' || usuario?.rol === 'SUPER_USUARIO') && (
@@ -111,6 +112,10 @@ const Navbar = () => {
                  <Avatar src={usuario?.foto_perfil} sx={{ width: 24, height: 24 }}>{usuario?.nombre?.charAt(0)}</Avatar>
                </ListItemIcon>
                <ListItemText primary="Mi Perfil" />
+             </ListItem>
+             <ListItem>
+                 <ListItemIcon><NotificationMenu /></ListItemIcon> 
+                 <ListItemText primary="Notificaciones" />
              </ListItem>
              <ListItem button onClick={handleLogout}>
                <ListItemIcon><LogoutIcon color="error" /></ListItemIcon>
@@ -158,7 +163,9 @@ const Navbar = () => {
                   {(usuario?.rol === 'AGENTE' || usuario?.rol === 'ADMIN') ? (
                      <Button component={RouterLink} to="/mis-propiedades" sx={navLinkStyle}>Mis Propiedades</Button>
                   ) : (
-                     <Button component={RouterLink} to="/solicitar-agente" sx={navLinkStyle}>Ser Agente</Button>
+                     <Button component={RouterLink} to="/planes" sx={navLinkStyle}>
+    Planes y Precios
+</Button>
                   )}
                   {(usuario?.rol === 'ADMIN' || usuario?.rol === 'SUPER_USUARIO') && (
                      <Button component={RouterLink} to="/admin" sx={{ ...navLinkStyle, color: '#ff8a80' }}>Admin</Button>
@@ -176,7 +183,7 @@ const Navbar = () => {
                       Nueva Propiedad
                     </Button>
                   )}
-                  
+                  <NotificationMenu />
                   <IconButton onClick={handleMenuOpen} sx={{ p: 0, ml: 1 }}>
                      <Box sx={{ display: 'flex', alignItems: 'center', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '30px', padding: '4px 10px 4px 4px' }}>
                         <Avatar src={usuario?.foto_perfil} alt={usuario?.nombre} sx={{ width: 32, height: 32, bgcolor: '#ff9800' }}>

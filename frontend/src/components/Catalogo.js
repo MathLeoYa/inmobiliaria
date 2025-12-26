@@ -2,10 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-
 import { 
   Box, Typography, Paper, Button, TextField, Grid, Select, MenuItem, 
-  FormControl, InputLabel, Snackbar, Alert, Container
+  FormControl, InputLabel, Snackbar, Alert, Container, CircularProgress
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PropiedadCard from './PropiedadCard'; 
@@ -64,10 +63,11 @@ const Catalogo = () => {
         if (filtrosActivos.tipo !== 'Cualquiera') params.append('tipo', filtrosActivos.tipo);
         if (filtrosActivos.precioMin) params.append('precioMin', filtrosActivos.precioMin);
         if (filtrosActivos.precioMax) params.append('precioMax', filtrosActivos.precioMax);
-        
       }
+      
       const res = await axios.get(`http://localhost:5000/api/propiedades?${params.toString()}`, { headers });
       setPropiedades(res.data);
+      
       if (res.data.length === 0 && filtrosActivos) {
         setSnackbarMsg('No se encontraron propiedades con esos filtros.');
         setOpenSnackbar(true);
@@ -98,8 +98,6 @@ const Catalogo = () => {
       await axios.post(`http://localhost:5000/api/favoritos/${propiedadId}`, {}, { headers: { 'x-auth-token': token } }); 
       setSnackbarMsg('Favoritos actualizado'); 
       setOpenSnackbar(true);
-      // Opcional: Re-fetch para que las tarjetas se actualicen con el nuevo estado de favoritos
-      // fetchPropiedades(filtros); 
     } catch (err) { 
       setSnackbarMsg('Error al actualizar favoritos.');
       setOpenSnackbar(true);
@@ -109,11 +107,11 @@ const Catalogo = () => {
 
   return (
     <Box>
-      {/* --- HERO SECTION MODERNA --- */}
+      {/* --- HERO SECTION ORIGINAL --- */}
       <Box sx={{
-        height: '80vh', // Más alto para el efecto visual
+        height: '80vh', // Tu altura original
         minHeight: '650px',
-        backgroundImage: 'url(/hero-background.jpg)', // Asegúrate de tener una buena imagen en public/
+        backgroundImage: 'url(/hero-background.jpg)', // Tu imagen original
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         position: 'relative',
@@ -121,7 +119,7 @@ const Catalogo = () => {
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        pb: '100px' // Espacio para que la caja de filtros se "solape"
+        pb: '100px'
       }}>
         {/* Overlay degradado sutil */}
         <Box sx={{
@@ -129,7 +127,6 @@ const Catalogo = () => {
           background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.2) 60%, rgba(0,0,0,0.1) 100%)'
         }} />
 
-        {/* Contenido del Hero (texto) */}
         <Container maxWidth="md" sx={{ position: 'relative', zIndex: 2, textAlign: 'center', color: 'white' }}>
           <Typography variant="h2" component="h1" sx={{ 
             fontWeight: 800, 
@@ -149,27 +146,26 @@ const Catalogo = () => {
           }}>
             Explora una amplia selección de propiedades exclusivas en las mejores ubicaciones de Ecuador.
           </Typography>
-
         </Container>
-      </Box> {/* Fin Hero Section */}
+      </Box> 
       
-      {/* --- CAJA DE FILTROS FLOTANTE DEBAJO DEL HERO --- */}
+      {/* --- CAJA DE FILTROS FLOTANTE --- */}
       <Box sx={{ 
         position: 'relative', 
-        zIndex: 3, // Asegura que esté sobre otras cosas
-        mt: -12, // Mueve la caja hacia arriba para que se solape con el hero
-        mb: 8, // Margen inferior para separar de las propiedades
+        zIndex: 3, 
+        mt: -12, // Tu margen negativo original
+        mb: 8, 
         display: 'flex',
         justifyContent: 'center'
       }}>
         <Paper elevation={12} sx={{
           width: '90%', 
-          maxWidth: '1200px', // Un poco más ancha para más espacio
-          borderRadius: '16px', // Bordes redondeados
+          maxWidth: '1200px',
+          borderRadius: '16px',
           overflow: 'hidden',
           backgroundColor: 'white',
-          boxShadow: '0px 10px 40px rgba(0,0,0,0.15)', // Sombra más pronunciada
-          p: 0 // Padding controlado internamente
+          boxShadow: '0px 10px 40px rgba(0,0,0,0.15)',
+          p: 0 
         }}>
           {/* Pestañas (Venta / Arriendo) */}
           <Box sx={{ display: 'flex', borderBottom: '1px solid #eee' }}>
@@ -178,13 +174,8 @@ const Catalogo = () => {
                 key={opcion}
                 onClick={() => setFiltros(prev => ({ ...prev, operacion: opcion }))}
                 sx={{
-                  flex: 1,
-                  py: 1.5,
-                  px: 2,
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  fontWeight: 'bold',
-                  fontSize: '0.95rem',
+                  flex: 1, py: 1.5, px: 2, cursor: 'pointer', textAlign: 'center',
+                  fontWeight: 'bold', fontSize: '0.95rem',
                   color: filtros.operacion === opcion ? '#1a237e' : '#888',
                   backgroundColor: filtros.operacion === opcion ? 'white' : '#fcfcfc',
                   borderBottom: filtros.operacion === opcion ? '3px solid #1a237e' : 'none',
@@ -200,7 +191,6 @@ const Catalogo = () => {
           <Box sx={{ p: 3 }}>
             <Grid container spacing={{ xs: 2, md: 3 }} alignItems="center">
               
-              {/* Provincia */}
               <Grid item xs={12} sm={6} md={2.5}>
                 <FormControl fullWidth variant="outlined" size="small">
                   <InputLabel>Provincia</InputLabel>
@@ -211,7 +201,6 @@ const Catalogo = () => {
                 </FormControl>
               </Grid>
 
-              {/* Cantón */}
               <Grid item xs={12} sm={6} md={2.5}>
                 <FormControl fullWidth variant="outlined" size="small" disabled={!filtros.provinciaId}>
                   <InputLabel>Ciudad / Cantón</InputLabel>
@@ -222,58 +211,33 @@ const Catalogo = () => {
                 </FormControl>
               </Grid>
 
-              {/* Tipo */}
               <Grid item xs={12} sm={6} md={2}>
-                 <FormControl fullWidth variant="outlined" size="small">
+                  <FormControl fullWidth variant="outlined" size="small">
                     <InputLabel>Tipo</InputLabel>
                     <Select name="tipo" value={filtros.tipo} label="Tipo" onChange={handleGenericoChange}>
-                       <MenuItem value="Cualquiera">Todos</MenuItem>
-                       <MenuItem value="Casa">Casa</MenuItem>
-                       <MenuItem value="Apartamento">Departamento</MenuItem>
-                       <MenuItem value="Terreno">Terreno</MenuItem>
-                       <MenuItem value="Comercial">Comercial</MenuItem>
+                        <MenuItem value="Cualquiera">Todos</MenuItem>
+                        <MenuItem value="Casa">Casa</MenuItem>
+                        <MenuItem value="Departamento">Departamento</MenuItem>
+                        <MenuItem value="Terreno">Terreno</MenuItem>
+                        <MenuItem value="Comercial">Comercial</MenuItem>
                     </Select>
-                 </FormControl>
+                  </FormControl>
               </Grid>
 
-              {/* Precio Min */}
               <Grid item xs={6} sm={3} md={1.5}>
-                 <TextField 
-                   label="Precio Mín" 
-                   name="precioMin" 
-                   type="number" 
-                   variant="outlined" 
-                   size="small" 
-                   fullWidth 
-                   onChange={handleGenericoChange} 
-                 />
+                  <TextField label="Precio Mín" name="precioMin" type="number" variant="outlined" size="small" fullWidth onChange={handleGenericoChange} />
               </Grid>
-              {/* Precio Max */}
               <Grid item xs={6} sm={3} md={1.5}>
-                 <TextField 
-                   label="Precio Máx" 
-                   name="precioMax" 
-                   type="number" 
-                   variant="outlined" 
-                   size="small" 
-                   fullWidth 
-                   onChange={handleGenericoChange} 
-                 />
+                  <TextField label="Precio Máx" name="precioMax" type="number" variant="outlined" size="small" fullWidth onChange={handleGenericoChange} />
               </Grid>
 
-              {/* Botón Buscar */}
               <Grid item xs={12} md={2}>
                 <Button 
-                  variant="contained" 
-                  color="primary" 
-                  size="large" 
-                  fullWidth 
+                  variant="contained" color="primary" size="large" fullWidth 
                   startIcon={<SearchIcon />} 
                   onClick={() => fetchPropiedades(filtros)}
                   sx={{ 
-                    py: 1.5, 
-                    borderRadius: '8px', 
-                    fontWeight: 'bold', 
+                    py: 1.5, borderRadius: '8px', fontWeight: 'bold', 
                     boxShadow: '0 4px 15px rgba(26, 35, 126, 0.3)',
                     backgroundColor: '#1a237e',
                     '&:hover': { backgroundColor: '#0d1a6b' }
@@ -301,9 +265,15 @@ const Catalogo = () => {
             No encontramos propiedades que coincidan con tus criterios. Intenta con otros filtros.
           </Typography>
         ) : (
-          <Grid container spacing={4} justifyContent="center">
+          /* --- AQUI ESTÁ LA CORRECCIÓN: alignItems="stretch" --- */
+          <Grid container spacing={4} justifyContent="center" alignItems="stretch">
             {propiedades.map((prop) => (
-              <Grid item key={prop.id} xs={12} sm={6} md={4} lg={3}>
+              <Grid
+                item
+                xs={12} sm={6} md={4} lg={3}
+                key={prop.id} // <--- KEY AGREGADA PARA EVITAR ERROR
+                sx={{ display: 'flex' }} // <--- DISPLAY FLEX PARA IGUALAR ALTURAS
+              >
                 <PropiedadCard propiedad={prop} onLike={handleLike} />
               </Grid>
             ))}
@@ -311,7 +281,6 @@ const Catalogo = () => {
         )}
       </Container>
       
-      {/* NOTIFICACIÓN (Snackbar) */}
       <Snackbar open={openSnackbar} autoHideDuration={4000} onClose={() => setOpenSnackbar(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={() => setOpenSnackbar(false)} severity="info" sx={{ width: '100%' }}>{snackbarMsg}</Alert>
       </Snackbar>
